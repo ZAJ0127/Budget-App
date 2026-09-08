@@ -77,7 +77,7 @@ input,select{font:inherit;color:inherit}
 .empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
 
 label.f{display:block;margin-top:14px}
-label.f>span{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}
+label.f>span,.f>span{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}
 .inp,select.inp{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:10px;background:var(--surface);appearance:none}
 select.inp{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' fill='none' stroke='%235E6B66' stroke-width='1.8'/></svg>");background-repeat:no-repeat;background-position:right 13px center;padding-right:34px}
 .money-in{display:flex;align-items:center;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:0 14px}
@@ -86,6 +86,7 @@ select.inp{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.
 .money-in.sm input{font-size:19px;padding:9px 0} .money-in.sm i{font-size:16px}
 .datewrap{display:flex;gap:8px}
 .datewrap .inp{flex:1}
+.datewrap .datefield{flex:none;width:50px;position:relative}
 .datewrap button{flex:none;width:50px;border:1px solid var(--line);border-radius:10px;background:var(--surface);display:grid;place-items:center;font-size:18px}
 .hint{font-size:12px;color:var(--faint);margin-top:5px}
 .hint.warn{color:var(--over)}
@@ -155,6 +156,19 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 .gear svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.7;fill:none}
 .pagetitle{flex:1;font-size:16px;font-weight:650;padding-left:6px}
 .badge{position:absolute;top:6px;right:50%;transform:translateX(18px);background:var(--over);color:#fff;font-size:10px;line-height:1;padding:3px 5px;border-radius:999px;font-weight:600}
+/* combo box */
+.combo{position:relative}
+.combo input{padding-right:40px}
+.comboArrow{position:absolute;right:2px;top:2px;bottom:2px;width:38px;display:grid;place-items:center;color:var(--muted);font-size:13px}
+.comboList{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;background:var(--surface);
+  border:1px solid var(--line);border-radius:10px;max-height:246px;overflow:auto;box-shadow:0 8px 24px rgba(20,32,29,.14)}
+.comboItem{display:block;width:100%;text-align:left;padding:11px 13px;border-top:1px solid var(--line);font-size:15px}
+.comboItem:first-child{border-top:none}
+.comboItem i{display:block;font-style:normal;font-size:11.5px;color:var(--faint);margin-top:1px}
+.comboItem.new{color:var(--accent);font-weight:560}
+.comboEmpty{padding:13px;color:var(--muted);font-size:14px}
+.datefield{position:relative}
+.datefield input[type=date]{position:absolute;inset:0;opacity:0;width:100%;height:100%;border:none;background:none}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -184,19 +198,15 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
       </label>
       <label class="f"><span id="lblName">Item name</span>
         <input class="inp" id="fName" type="text" autocomplete="off" placeholder="e.g. Bounty Hunter Funko"></label>
-      <label class="f" id="wCat"><span>Category</span>
-        <select class="inp" id="fCat"></select></label>
-      <label class="f" id="wRet"><span>Retailer</span>
-        <input class="inp" id="fRet" list="retList" autocomplete="off" placeholder="Type or pick">
-        <datalist id="retList"></datalist>
-        <div class="hint">Type a new name and it gets added to the list.</div></label>
-      <label class="f" id="wCard"><span>Paid with</span>
-        <select class="inp" id="fCard"></select></label>
+      <div class="f" id="wCat"><span>Category</span><div id="fCat"></div></div>
+      <div class="f" id="wRet"><span>Retailer</span><div id="fRet"></div>
+        <div class="hint">Type a new name and it joins the list.</div></div>
+      <div class="f" id="wCard"><span>Paid with</span><div id="fCard"></div></div>
       <label class="f"><span>Date</span>
         <div class="datewrap">
-          <input class="inp num" id="fDateText" type="text" inputmode="numeric" placeholder="1/2/26" autocomplete="off">
-          <button type="button" id="fDateBtn" aria-label="Open calendar">📅</button>
-          <input type="date" id="fDatePick" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none">
+          <input class="inp num" id="fDateText" type="text" placeholder="9/5/26 or 090526" autocomplete="off">
+          <div class="datefield"><button type="button" tabindex="-1" aria-hidden="true">📅</button>
+            <input type="date" id="fDatePick" aria-label="Pick a date"></div>
         </div>
         <div class="hint" id="dateEcho">—</div>
         <div class="chips">
@@ -295,6 +305,15 @@ const todayIso=()=>isoOf(new Date());
 function parseTyped(str){
   const s=String(str).trim().toLowerCase(); if(!s) return null;
   const now=new Date();
+  const bare=s.replace(/\s/g,"");
+  if(/^\d{4}$|^\d{6}$|^\d{8}$/.test(bare)&&!/^\d{4}-/.test(s)){
+    const L=bare.length;
+    const a=+bare.slice(0,2),b=+bare.slice(2,4);
+    let y=L===4?now.getFullYear():L===6?2000+ +bare.slice(4,6):+bare.slice(4,8);
+    let day,mo; if(S.settings.dateFormat==="MDY"){mo=a;day=b;}else{day=a;mo=b;}
+    if(mo>=1&&mo<=12&&day>=1&&day<=31){const d=new Date(y,mo-1,day);
+      if(d.getMonth()===mo-1)return isoOf(d);}
+  }
   let m=s.match(/^(\d{1,2})[\/\.\- ](\d{1,2})(?:[\/\.\- ](\d{2,4}))?$/);
   if(m){let a=+m[1],b=+m[2],y=m[3]?+m[3]:now.getFullYear(); if(y<100)y+=2000;
     let day,mo; if(S.settings.dateFormat==="MDY"){mo=a;day=b;}else{day=a;mo=b;}
@@ -383,17 +402,12 @@ function setTab(t){view.tab=t;
   render();window.scrollTo(0,0);}
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
 
+let cCat,cRet,cCard;
 function fillSelects(){
-  const sel=$("#fCat"),cur=sel.value;sel.innerHTML="";
-  for(const g of S.groups) for(const c of catsOfGroup(g.id)){
-    const og=document.createElement("optgroup");og.label=g.name+" › "+c.name;
-    for(const s of subsOfCat(c.id)){const o=document.createElement("option");o.value=s.id;o.textContent=s.name;og.appendChild(o);}
-    if(og.children.length) sel.appendChild(og);
-  }
-  if(cur&&byId(S.subs,cur))sel.value=cur;
-  const dl=$("#retList");dl.innerHTML=S.retailers.map(r=>`<option value="${esc(r.name)}">`).join("");
-  const cs=$("#fCard"),cc=cs.value;cs.innerHTML=S.cards.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
-  if(cc&&byId(S.cards,cc))cs.value=cc;
+  const keep=[cCat&&cCat.id,cRet&&cRet.id,cCard&&cCard.id];
+  cCat =combo($("#fCat"), catItems , {value:keep[0]||(S.subs[0]||{}).id, placeholder:"Type or pick a category"});
+  cRet =combo($("#fRet"), retItems , {value:keep[1]||"", allowNew:true, placeholder:"Type or pick a retailer"});
+  cCard=combo($("#fCard"),cardItems, {value:keep[2]||(S.cards[0]||{}).id, placeholder:"Type or pick"});
 }
 
 /* ---------- render ---------- */
@@ -456,6 +470,66 @@ function render(){
   if(view.tab==="log")renderLog();
   if(view.tab==="setup")renderSetup();
 }
+
+/* ---------- type-to-filter combo ---------- */
+function combo(root,getItems,opt){
+  opt=opt||{};
+  root.classList.add("combo");
+  root.innerHTML=`<input class="inp" autocomplete="off" autocapitalize="words" placeholder="${esc(opt.placeholder||"Type or pick")}">
+    <button type="button" class="comboArrow" tabindex="-1" aria-label="Show list">▼</button>
+    <div class="comboList" hidden></div>`;
+  const inp=root.querySelector("input"),list=root.querySelector(".comboList"),arrow=root.querySelector(".comboArrow");
+  let id=opt.value||"";
+  const items=()=>getItems()||[];
+  const nameOf=i=>{const x=items().find(y=>y.id===i);return x?x.name:"";};
+  if(id)inp.value=nameOf(id);
+  function draw(){
+    const q=inp.value.trim().toLowerCase();
+    let arr=items();
+    if(q){
+      const st=arr.filter(x=>x.name.toLowerCase().startsWith(q));
+      const inn=arr.filter(x=>!x.name.toLowerCase().startsWith(q)&&x.name.toLowerCase().includes(q));
+      arr=st.concat(inn);
+    }
+    let h=arr.slice(0,60).map(x=>`<button type="button" class="comboItem" data-id="${x.id}">${esc(x.name)}${x.sub?`<i>${esc(x.sub)}</i>`:""}</button>`).join("");
+    const exact=items().some(x=>x.name.toLowerCase()===q);
+    if(opt.allowNew&&q&&!exact)
+      h=`<button type="button" class="comboItem new" data-new="1">Use “${esc(inp.value.trim())}” — new</button>`+h;
+    list.innerHTML=h||`<div class="comboEmpty">Nothing matches</div>`;
+    list.hidden=false;
+  }
+  const close=()=>{list.hidden=true;};
+  inp.addEventListener("focus",draw);
+  inp.addEventListener("input",draw);
+  inp.addEventListener("blur",()=>setTimeout(()=>{
+    close();
+    const q=inp.value.trim().toLowerCase();
+    const hit=items().find(x=>x.name.toLowerCase()===q);
+    if(hit){id=hit.id;inp.value=hit.name;}
+    else if(!opt.allowNew)inp.value=nameOf(id);
+  },180));
+  arrow.addEventListener("pointerdown",e=>{e.preventDefault();
+    if(!list.hidden){close();return;} inp.focus();inp.select();draw();});
+  list.addEventListener("pointerdown",e=>{
+    const b=e.target.closest(".comboItem"); if(!b)return; e.preventDefault();
+    if(b.dataset.new){id="";}
+    else{id=b.dataset.id;inp.value=nameOf(id);}
+    close(); inp.blur(); if(opt.onPick)opt.onPick(id);
+  });
+  return {
+    get id(){const q=inp.value.trim().toLowerCase();
+      const hit=items().find(x=>x.name.toLowerCase()===q);return hit?hit.id:(q?id&&nameOf(id).toLowerCase()===q?id:"":id);},
+    get text(){return inp.value.trim();},
+    set(v){id=v;inp.value=nameOf(v);},
+    focus(){inp.focus();}
+  };
+}
+const catItems=()=>{const out=[];
+  for(const g of S.groups)for(const c of catsOfGroup(g.id))for(const x of subsOfCat(c.id))
+    out.push({id:x.id,name:x.name,sub:g.name+" › "+c.name});
+  return out;};
+const retItems=()=>S.retailers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({id:r.id,name:r.name}));
+const cardItems=()=>S.cards.map(c=>({id:c.id,name:c.name}));
 
 /* ---------- subscriptions ---------- */
 function daysInMonth(y,m){return new Date(y,m,0).getDate();}
@@ -520,23 +594,18 @@ function openRecur(id){
     <label class="f"><span>How often</span><select class="inp" id="qF">
       ${Object.entries(F).map(([k,v])=>`<option value="${k}" ${r&&(r.freq||"monthly")===k?"selected":""}>${v}</option>`).join("")}</select></label>
     <label class="f"><span>Next charge</span><input class="inp num" id="qD" type="date" value="${r?r.next:addDays(todayIso(),1)}"></label>
-    <label class="f"><span>Category</span><select class="inp" id="qS"></select></label>
-    <label class="f"><span>Retailer</span><input class="inp" id="qR" list="retList" value="${r?esc(retName(r.r)):""}"></label>
-    <label class="f"><span>Paid with</span><select class="inp" id="qK"></select></label>
+    <div class="f"><span>Category</span><div id="qS"></div></div>
+    <div class="f"><span>Retailer</span><div id="qR"></div></div>
+    <div class="f"><span>Paid with</span><div id="qK"></div></div>
     <div class="chips" style="margin-top:16px">
       <button type="button" class="chip ${!r||r.on?"on":""}" id="qOn">${!r||r.on?"Running":"Paused"}</button>
       ${r?`<button type="button" class="chip" id="qSkip">Skip the next one</button>`:""}
     </div>
     <button class="btn" id="qSave">${r?"Save":"Add subscription"}</button>
     ${r?`<button class="btn sm danger" id="qDel">Delete</button>`:""}`);
-  const sel=$("#qS");
-  for(const g of S.groups)for(const c of catsOfGroup(g.id)){
-    const og=document.createElement("optgroup");og.label=g.name+" › "+c.name;
-    for(const x of subsOfCat(c.id)){const o=document.createElement("option");o.value=x.id;o.textContent=x.name;og.appendChild(o);}
-    if(og.children.length)sel.appendChild(og);}
-  if(r)sel.value=r.s;
-  $("#qK").innerHTML=S.cards.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
-  $("#qK").value=r?r.k:S.cards[0].id;
+  const qCat=combo($("#qS"),catItems,{value:r?r.s:(S.subs[0]||{}).id});
+  const qRet=combo($("#qR"),retItems,{value:r?r.r:"",allowNew:true});
+  const qCard=combo($("#qK"),cardItems,{value:r?r.k:(S.cards[0]||{}).id});
   let on=r?!!r.on:true;
   $("#qOn").onclick=()=>{on=!on;$("#qOn").classList.toggle("on",on);$("#qOn").textContent=on?"Running":"Paused";};
   if(r)$("#qSkip").onclick=()=>{r.next=advance(r,r.next);save();closeSheet();render();
@@ -546,7 +615,7 @@ function openRecur(id){
     const a=num($("#qA").value);if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
     const next=$("#qD").value||addDays(todayIso(),1);
     const o={n,a:+a.toFixed(2),freq:$("#qF").value,next,day:dOf(next).getDate(),
-             s:$("#qS").value,r:retIdFor($("#qR").value),k:$("#qK").value,on:on?1:0};
+             s:qCat.id||(S.subs[0]||{}).id,r:retIdFor(qRet.text),k:qCard.id||(S.cards[0]||{}).id,on:on?1:0};
     if(r)Object.assign(r,o);else (S.recur=S.recur||[]).push(Object.assign({id:uid("q")},o));
     save();closeSheet();render();toast("Saved");};
   if(r)$("#qDel").onclick=()=>{
@@ -875,6 +944,7 @@ function renderSetup(){
     <h2>Lists</h2>
     <button class="btn sm ghost" data-list="cat">Categories &amp; sub-categories</button>
     <button class="btn sm ghost" data-list="ret">Retailers (${S.retailers.length})</button>
+    <div class="hint" style="margin:6px 0 0">Open a list to rename or delete anything in it.</div>
     <button class="btn sm ghost" data-list="card">Payment methods (${S.cards.length})</button>
     <button class="btn sm ghost" data-list="line">Plan lines (${S.lines.length})</button>
     <button class="btn sm ghost" data-tabjump="subs">Subscriptions (${(S.recur||[]).filter(r=>r.on).length})</button>
@@ -946,12 +1016,10 @@ $("#tRefund").onclick=()=>{view.refund=!view.refund;setMode(view.mode);};
 $("#mSpend").onclick=()=>setMode("spend");
 $("#mIncome").onclick=()=>setMode("income");
 $("#mSave").onclick=()=>setMode("save");
-$("#fDateBtn").onclick=()=>{const p=$("#fDatePick");
-  if(p.showPicker){try{p.showPicker();return;}catch(e){}}
-  p.style.cssText="";p.focus();p.click();};
 $("#fDatePick").onchange=e=>{if(e.target.value)setDate(e.target.value);};
 $("#fDateText").onchange=e=>{const iso=parseTyped(e.target.value);
-  if(iso)setDate(iso);else{$("#dateEcho").textContent="Couldn't read that — try 1/2/26";$("#dateEcho").classList.add("warn");}};
+  if(iso)setDate(iso);
+  else{$("#dateEcho").textContent="Couldn't read that — try 9/5/26, 090526, or the calendar";$("#dateEcho").classList.add("warn");}};
 document.querySelectorAll("[data-quick]").forEach(b=>b.onclick=()=>setDate(addDays(todayIso(),+b.dataset.quick)));
 const num=v=>{const n=parseFloat(String(v).replace(/[^0-9.\-]/g,""));return isFinite(n)?n:NaN;};
 
@@ -967,9 +1035,9 @@ $("#saveEntry").onclick=()=>{
   if(!isFinite(a)||a<=0){toast("Enter an amount above zero");$("#fAmount").focus();return;}
   const n=$("#fName").value.trim(),y=cycleFor(view.date);
   if(view.mode==="spend"){
-    const sid=$("#fCat").value,amt=view.refund?-Math.abs(a):a;
+    const sid=cCat.id||(S.subs[0]||{}).id,amt=view.refund?-Math.abs(a):a;
     const rec={id:uid("t"),d:view.date,n:n||subName(sid),a:+amt.toFixed(2),s:sid,
-               r:retIdFor($("#fRet").value),k:$("#fCard").value,y};
+               r:retIdFor(cRet.text),k:cCard.id||(S.cards[0]||{}).id,y};
     if(view.pend)rec.p=1;
     S.tx.push(rec);
   } else if(view.mode==="income") S.inc.push({id:uid("i"),d:view.date,n:n||"Income",a:+a.toFixed(2),y});
@@ -987,15 +1055,17 @@ function openEdit(id,kind){
   openSheet(`<div class="sheethead"><h3>Edit ${kind==="tx"?"entry":kind==="inc"?"income":"savings"}</h3><button class="close" data-close>×</button></div>
     <label class="f"><span>Amount</span><div class="money-in"><i>${esc(S.settings.symbol)}</i><input class="num" id="eA" type="text" inputmode="decimal" value="${rec.a}"></div></label>
     <label class="f"><span>${kind==="tx"?"Item name":kind==="inc"?"From":"Moved to"}</span><input class="inp" id="eN" value="${esc(rec.n)}"></label>
-    ${kind==="tx"?`<label class="f"><span>Category</span><select class="inp" id="eS"></select></label>
-    <label class="f"><span>Retailer</span><input class="inp" id="eR" list="retList" value="${esc(retName(rec.r))}"></label>
-    <label class="f"><span>Paid with</span><select class="inp" id="eK"></select></label>`:""}
+    ${kind==="tx"?`<div class="f"><span>Category</span><div id="eS"></div></div>
+    <div class="f"><span>Retailer</span><div id="eR"></div></div>
+    <div class="f"><span>Paid with</span><div id="eK"></div></div>`:""}
     <label class="f"><span>Date</span><input class="inp num" id="eD" type="date" value="${rec.d}"></label>
     ${kind==="tx"?`<div class="chips" style="margin-top:16px">
       <button type="button" class="chip ${rec.p?"on":""}" id="ePend">${rec.p?"⏳ Not cleared":"✓ Cleared"}</button>
       <button type="button" class="chip ${rec.a<0?"on":""}" id="eFlip">${rec.a<0?"↩ It's a refund":"Make it a refund"}</button>
     </div>`:""}
     <button class="btn" id="eSave">Save changes</button>
+    ${kind==="tx"?`<button class="btn sm ghost" id="eAgain">Log this again today</button>
+    <button class="btn sm ghost" id="eSub">Make it a monthly subscription</button>`:""}
     ${kind==="tx"&&rec.a>0?`<button class="btn sm ghost" id="eRefund">Log a refund for this</button>`:""}
     <button class="btn sm danger" id="eDel">Delete</button>`);
   if(kind==="tx"){
@@ -1010,21 +1080,37 @@ function openEdit(id,kind){
       S.tx.push({id:uid("t"),d,n:rec.n+" (refund)",a:-Math.abs(rec.a),s:rec.s,r:rec.r,k:rec.k,y:cycleFor(d),p:1});
       save();closeSheet();view.cycle=cycleFor(d);setTab("pending");toast("Refund logged as pending");};
   }
+  let eCat,eRet,eCard;
   if(kind==="tx"){
-    const s=$("#eS");
-    for(const g of S.groups)for(const c of catsOfGroup(g.id)){
-      const og=document.createElement("optgroup");og.label=g.name+" › "+c.name;
-      for(const x of subsOfCat(c.id)){const o=document.createElement("option");o.value=x.id;o.textContent=x.name;og.appendChild(o);}
-      if(og.children.length)s.appendChild(og);}
-    s.value=rec.s;
-    $("#eK").innerHTML=S.cards.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("");
-    $("#eK").value=rec.k||S.cards[0].id;
+    eCat =combo($("#eS"),catItems ,{value:rec.s});
+    eRet =combo($("#eR"),retItems ,{value:rec.r,allowNew:true});
+    eCard=combo($("#eK"),cardItems,{value:rec.k||(S.cards[0]||{}).id});
+    let pend=!!rec.p, flip=rec.a<0;
+    $("#ePend").onclick=()=>{pend=!pend;$("#ePend").classList.toggle("on",pend);
+      $("#ePend").textContent=pend?"⏳ Not cleared":"✓ Cleared";rec._p=pend;};
+    $("#eFlip").onclick=()=>{flip=!flip;$("#eFlip").classList.toggle("on",flip);
+      $("#eFlip").textContent=flip?"↩ It's a refund":"Make it a refund";rec._f=flip;};
+    rec._p=pend;rec._f=flip;
+    $("#eAgain").onclick=()=>{
+      const d=todayIso();
+      S.tx.push({id:uid("t"),d,n:rec.n,a:rec.a,s:eCat.id||rec.s,r:eRet.id||rec.r,k:eCard.id||rec.k,y:cycleFor(d),p:1});
+      save();closeSheet();view.cycle=cycleFor(d);setTab("pending");toast("Logged again, sitting in Pending");};
+    $("#eSub").onclick=()=>{
+      const next=addDays(todayIso(),1);
+      S.recur=S.recur||[];
+      S.recur.push({id:uid("q"),n:rec.n,a:Math.abs(rec.a),freq:"monthly",next,day:dOf(next).getDate(),
+                    s:eCat.id||rec.s,r:eRet.id||rec.r,k:eCard.id||rec.k,on:1});
+      save();closeSheet();setTab("subs");toast("Added as a monthly subscription — check the date");};
+    if(rec.a>0)$("#eRefund").onclick=()=>{
+      const d=todayIso();
+      S.tx.push({id:uid("t"),d,n:rec.n+" (refund)",a:-Math.abs(rec.a),s:rec.s,r:rec.r,k:rec.k,y:cycleFor(d),p:1});
+      save();closeSheet();view.cycle=cycleFor(d);setTab("pending");toast("Refund logged as pending");};
   }
   $("#eSave").onclick=()=>{
     const a=num($("#eA").value); if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
     rec.a=+a.toFixed(2); rec.n=$("#eN").value.trim()||rec.n;
     if($("#eD").value){rec.d=$("#eD").value;rec.y=cycleFor(rec.d);}
-    if(kind==="tx"){rec.s=$("#eS").value;rec.r=retIdFor($("#eR").value);rec.k=$("#eK").value;
+    if(kind==="tx"){rec.s=eCat.id||rec.s;rec.r=retIdFor(eRet.text);rec.k=eCard.id||rec.k;
       rec.a=rec._f?-Math.abs(rec.a):Math.abs(rec.a);
       if(rec._p)rec.p=1;else delete rec.p;
       delete rec._f;delete rec._p;}
@@ -1129,34 +1215,69 @@ function openItem(kind,id){
   const arr=kind==="cat"?S.cats:kind==="sub"?S.subs:kind==="ret"?S.retailers:S.cards;
   const it=id?byId(arr,id):null,used=id?countUse(kind,id):0;
   let extra="";
-  if(kind==="cat") extra=`<label class="f"><span>Belongs to</span><select class="inp" id="iP">${S.groups.map(g=>`<option value="${g.id}" ${it&&it.g===g.id?"selected":""}>${esc(g.name)}</option>`).join("")}</select></label>`;
-  if(kind==="sub") extra=`<label class="f"><span>Belongs to</span><select class="inp" id="iP">${S.groups.map(g=>catsOfGroup(g.id).map(c=>`<option value="${c.id}" ${it&&it.c===c.id?"selected":""}>${esc(g.name)} › ${esc(c.name)}</option>`).join("")).join("")}</select></label>`;
+  if(kind==="cat"||kind==="sub") extra=`<div class="f"><span>Belongs to</span><div id="iP"></div></div>`;
   openSheet(`<div class="sheethead"><h3>${it?"Edit":"New"} ${kind==="cat"?"category":kind==="sub"?"sub-category":kind==="ret"?"retailer":"payment method"}</h3><button class="close" data-close>×</button></div>
     <label class="f"><span>Name</span><input class="inp" id="iN" value="${it?esc(it.name):""}" autocomplete="off"></label>
     ${extra}
     ${used?`<div class="hint" style="margin-top:10px">Used by ${used} entries.</div>`:""}
     <button class="btn" id="iSave">${it?"Save":"Add"}</button>
     ${it?`<button class="btn sm danger" id="iDel">Delete</button>`:""}`);
+  let iPar=null;
+  if(kind==="cat") iPar=combo($("#iP"),()=>S.groups.map(g=>({id:g.id,name:g.name})),{value:it?it.g:S.groups[0].id});
+  if(kind==="sub") iPar=combo($("#iP"),()=>S.cats.map(c=>({id:c.id,name:c.name,sub:(byId(S.groups,c.g)||{}).name})),{value:it?it.c:S.cats[0].id});
   $("#iSave").onclick=()=>{
     const n=$("#iN").value.trim(); if(!n){toast("Give it a name");return;}
-    if(it){it.name=n; if(kind==="cat")it.g=$("#iP").value; if(kind==="sub")it.c=$("#iP").value;}
+    if(it){it.name=n; if(kind==="cat"&&iPar.id)it.g=iPar.id; if(kind==="sub"&&iPar.id)it.c=iPar.id;}
     else{
       const o={id:uid(kind[0]),name:n};
-      if(kind==="cat"){o.g=$("#iP").value;S.cats.push(o);}
-      else if(kind==="sub"){o.c=$("#iP").value;S.subs.push(o);}
+      if(kind==="cat"){o.g=iPar.id||S.groups[0].id;S.cats.push(o);}
+      else if(kind==="sub"){o.c=iPar.id||S.cats[0].id;S.subs.push(o);}
       else if(kind==="ret")S.retailers.push(o); else S.cards.push(o);
     }
     save();fillSelects();closeSheet();openList(kind==="sub"?"cat":kind);render();toast("Saved");};
   if(it)$("#iDel").onclick=()=>{
-    if(kind==="cat"&&subsOfCat(it.id).length){toast("Move or delete its sub-categories first");return;}
-    if(used&&!confirm(used+" entries use this. Delete anyway? They'll be left blank."))return;
-    if(kind==="sub"&&used){toast("Reassign those entries first");return;}
-    const i=arr.indexOf(it);arr.splice(i,1);
-    if(kind==="ret")S.tx.forEach(t=>{if(t.r===id)t.r="";});
-    if(kind==="card")S.tx.forEach(t=>{if(t.k===id)t.k="";});
-    S.lines.forEach(l=>{if(l.subs)l.subs=l.subs.filter(x=>x!==id);});
-    save();fillSelects();closeSheet();openList(kind==="sub"?"cat":kind);render();toast("Deleted");};
+    if(kind==="cat"&&subsOfCat(it.id).length){
+      toast("Move or delete its sub-categories first");return;}
+    if(!used){
+      if(!confirm("Delete “"+it.name+"”?"))return;
+      arr.splice(arr.indexOf(it),1);
+      S.lines.forEach(l=>{if(l.subs)l.subs=l.subs.filter(x=>x!==id);});
+      save();fillSelects();closeSheet();openList(kind==="sub"?"cat":kind);render();toast("Deleted");
+      return;
+    }
+    if(kind==="ret"||kind==="card"){
+      if(!confirm(used+" entries use “"+it.name+"”. Delete it and leave them blank?"))return;
+      arr.splice(arr.indexOf(it),1);
+      S.tx.forEach(t=>{if(kind==="ret"&&t.r===id)t.r="";if(kind==="card"&&t.k===id)t.k="";});
+      (S.recur||[]).forEach(r=>{if(kind==="ret"&&r.r===id)r.r="";if(kind==="card"&&r.k===id)r.k="";});
+      save();fillSelects();closeSheet();openList(kind);render();toast("Deleted");
+      return;
+    }
+    /* categories in use must hand their entries somewhere */
+    const opts=(kind==="sub"
+      ? S.subs.filter(x=>x.id!==id).map(x=>({id:x.id,name:x.name,sub:catPathOf(x.id)}))
+      : S.cats.filter(x=>x.id!==id).map(x=>({id:x.id,name:x.name,sub:(byId(S.groups,x.g)||{}).name})));
+    openSheet(`<div class="sheethead"><h3>Delete “${esc(it.name)}”</h3><button class="close" data-close>×</button></div>
+      <div class="hint" style="margin:10px 0 0">${used} entries use it, so they need somewhere to go.
+        Pick a replacement, or go back and rename it instead.</div>
+      <div class="f"><span>Move those ${used} entries to</span><div id="mvTo"></div></div>
+      <button class="btn danger" id="mvGo" style="background:none;border:1px solid var(--line)">Move them and delete</button>
+      <button class="btn sm ghost" data-close>Keep it</button>`);
+    const mv=combo($("#mvTo"),()=>opts,{placeholder:"Type or pick"});
+    $("#mvGo").onclick=()=>{
+      const to=mv.id; if(!to){toast("Pick where they should go");return;}
+      if(kind==="sub"){S.tx.forEach(t=>{if(t.s===id)t.s=to;});(S.recur||[]).forEach(r=>{if(r.s===id)r.s=to;});
+        S.lines.forEach(l=>{if(l.subs){l.subs=l.subs.filter(x=>x!==id);if(!l.subs.includes(to))l.subs.push(to);}});
+        S.subs.splice(S.subs.indexOf(it),1);
+      } else {
+        const moving=subsOfCat(it.id);
+        moving.forEach(x=>{x.c=to;});
+        S.cats.splice(S.cats.indexOf(it),1);
+      }
+      save();fillSelects();closeSheet();openList("cat");render();toast("Moved and deleted");};
+  };
 }
+
 function openLineEdit(id){
   const l=id?byId(S.lines,id):null;
   const chosen=new Set(l&&l.subs?l.subs:[]);
