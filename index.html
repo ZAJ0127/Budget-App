@@ -427,7 +427,9 @@ const sumOf=(arr)=>arr.reduce((a,t)=>a+t.a,0);
 /* accounts */
 const clearedSpend=()=>S.tx.filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
 const totalIncome=()=>sumOf(S.inc);
-const totalSaved=()=>sumOf(S.sav);
+const totalSaved=()=>S.sav.filter(x=>!x.p).reduce((a,t)=>a+t.a,0);
+const pendSav=()=>S.sav.filter(x=>x.p);
+const savIncoming=()=>-pendSav().filter(x=>x.a<0).reduce((a,t)=>a+t.a,0);
 function accBal(a){
   const adj=a.bal||0;
   if(a.type==="bank")    return totalIncome()-clearedSpend()-savingsTotal()+adj;
@@ -461,7 +463,7 @@ function render(){
   $("#jumpToday").hidden=rel===0||!cycleTabs;
   $("#prevCycle").disabled=view.cycle<=0;
   $("#nextCycle").disabled=view.cycle>=S.cycles.length-1;
-  const np=pendingTx().length;
+  const np=pendingTx().length+pendSav().length;
   $("#penBadge").hidden=!np; $("#penBadge").textContent=np>99?"99+":np;
   $("#storeWarn").hidden=!memFallback;
   if(memFallback)$("#storeWarn").textContent="This browser won't let the app save to the device — entries will vanish when you close the tab. Open the file directly in Chrome, or install it from a hosted URL.";
@@ -484,6 +486,14 @@ function planTotals(i){
   }
   return {alloc,spent};
 }
+function openingBal(i){
+  const ov=(S.carry&&S.carry.set)||{};
+  if(ov[String(i)]!=null)return ov[String(i)];
+  return +(bankBal()
+    - sumOf(incIn(i))
+    + txIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0)
+    + savIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0)).toFixed(2);
+}
 function carriedInto(i){
   const c=S.carry||{},ov=c.set||{};
   if(ov[String(i)]!=null)return ov[String(i)];      /* you set it by hand */
@@ -495,24 +505,47 @@ function carriedInto(i){
   }
   return +carry.toFixed(2);
 }
+function openPullSav(want){
+  const avail=savingsTotal();
+  openSheet(`<div class="sheethead"><h3>Take money from savings</h3>
+    <span class="hint" style="margin:0">${money(avail)} saved</span>
+    <button class="close" data-close>×</button></div>
+    <label class="f"><span>Amount to move across</span>
+      <div class="money-in"><i>${esc(S.settings.symbol)}</i>
+        <input class="num" id="wA" type="text" inputmode="decimal" value="${want||""}" placeholder="0.00"></div></label>
+    <label class="f"><span>Out of</span><div id="wFrom"></div></label>
+    <label class="f"><span>Date</span><input class="inp num" id="wD" type="date" value="${todayIso()}"></label>
+    <div class="hint">It sits in Pending until the transfer actually lands. Your savings balance and checking
+      both stay put until you tick it off, but the plan counts on it straight away.</div>
+    <button class="btn" id="wGo" style="background:var(--save)">Request the transfer</button>`);
+  const accs=()=>S.accounts.filter(a=>a.type==="linked"||a.type==="savings").map(a=>({id:a.id,name:a.name}));
+  const wFrom=combo($("#wFrom"),accs,{value:(accs()[0]||{}).id});
+  $("#wGo").onclick=()=>{
+    const v=num($("#wA").value);
+    if(!isFinite(v)||v<=0){toast("Enter an amount above zero");return;}
+    if(v>avail+0.005&&!confirm("That is more than the "+money(avail)+" you have saved. Carry on?"))return;
+    const d=$("#wD").value||todayIso();
+    const from=byId(S.accounts,wFrom.id);
+    S.sav.push({id:uid("v"),d,n:"From "+((from||{}).name||"savings"),a:-Math.abs(+v.toFixed(2)),y:cycleFor(d),p:1});
+    save();closeSheet();setTab("pending");toast(money(v)+" requested — sitting in Pending");};
+}
 function openCarry(i){
-  const c=S.carry||{},ov=(c.set||{}),fixed=ov[String(i)]!=null;
-  const auto=(()=>{const save=c.set;S.carry.set={};const v=carriedInto(i);S.carry.set=save;return v;})();
-  openSheet(`<div class="sheethead"><h3>Carried into this cycle</h3>
+  const ov=(S.carry&&S.carry.set)||{},fixed=ov[String(i)]!=null;
+  const save0=S.carry.set;S.carry.set={};const auto=openingBal(i);S.carry.set=save0;
+  openSheet(`<div class="sheethead"><h3>Opening balance</h3>
     <span class="hint" style="margin:0">${fmtShort(cyc(i).s)} – ${fmtShort(cyc(i).e)}</span>
     <button class="close" data-close>×</button></div>
-    <label class="f"><span>Leftover brought forward</span>
+    <label class="f"><span>What was sitting in checking when this cycle began</span>
       <div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
         <input class="num" id="kA" type="text" inputmode="decimal" value="${fixed?ov[String(i)]:""}" placeholder="0.00"></div></label>
-    <div class="hint">${fixed?"You set this by hand. Worked out automatically it would be "+money(auto)+"."
-      :"Left alone it works out to "+money(auto)+" from the last cycle's unspent budget."}
-      Anything you set here becomes the new starting point — later cycles chain on from it.</div>
+    <div class="hint">${fixed?"You set this by hand. Worked out from your entries it would be "+money(auto)+"."
+      :"Worked out from your entries: "+money(auto)+". That's every cycle's leftover, added up."}
+      Change it only if the real balance differs from what the app has.</div>
     <button class="btn" id="kSave">Use this figure</button>
-    <button class="btn sm ghost" id="kZero">Start this cycle from zero</button>
+    <button class="btn sm ghost" id="kZero">Treat this cycle as starting from zero</button>
     ${fixed?`<button class="btn sm ghost" id="kAuto">Go back to working it out</button>`:""}`);
-  const put=v=>{S.carry.set=S.carry.set||{};S.carry.set[String(i)]=v;
-    if(!S.carry.on){S.carry.on=1;if(S.carry.from==null)S.carry.from=i;}
-    save();closeSheet();render();toast("Carried in: "+money(v));};
+  const put=v=>{S.carry=S.carry||{};S.carry.set=S.carry.set||{};S.carry.set[String(i)]=v;
+    save();closeSheet();render();toast("Opening balance: "+money(v));};
   $("#kSave").onclick=()=>{const v=num($("#kA").value);put(isFinite(v)?+v.toFixed(2):0);};
   $("#kZero").onclick=()=>put(0);
   if(fixed)$("#kAuto").onclick=()=>{delete S.carry.set[String(i)];save();closeSheet();render();toast("Back to automatic");};
@@ -882,12 +915,25 @@ function renderStats(){
 /* ---------- pending ---------- */
 function renderPending(){
   const list=pendingTx().slice().sort((a,b)=>a.d<b.d?1:-1);
+  const psav=pendSav().slice().sort((a,b)=>a.d<b.d?1:-1);
+  const savBlock=psav.length?`<div class="card flush" style="margin-top:12px">
+      <div class="daylabel" style="border-top:none">Savings transfers on the way · <span class="num">${money(savIncoming())}</span></div>
+      ${psav.map(t=>`<div class="row">
+        <button class="check" data-clearsav="${t.id}" aria-label="Mark as landed">✓</button>
+        <button class="main" style="text-align:left;padding:0" data-edit="${t.id}" data-kind="sav">
+          <b>${esc(t.n)}</b><span>${fmtShort(t.d)} · ${t.a<0?"coming out of savings":"going into savings"}</span></button>
+        <div class="amt sv num">${money(t.a)}</div></div>`).join("")}
+    </div>`:"";
   const total=openBalance();
   const charges=list.filter(t=>t.a>0),refs=list.filter(t=>t.a<0);
-  if(!list.length){
+  if(!list.length&&!psav.length){
     $("#p-pending").innerHTML=`<div class="card flush"><div class="empty"><b>Nothing waiting</b>
       Everything you've logged has cleared. Mark an entry as pending when you've paid but it hasn't hit the account yet.</div></div>
       <div class="card"><button class="btn sm ghost" data-tabjump="subs">Subscriptions · ${money(recurMonthly())} a month</button></div>`;
+    return;
+  }
+  if(!list.length){
+    $("#p-pending").innerHTML=savBlock+`<div class="card"><button class="btn sm ghost" data-tabjump="subs">Subscriptions · ${money(recurMonthly())} a month</button></div>`;
     return;
   }
   const byCard={};
@@ -910,7 +956,7 @@ function renderPending(){
       <div class="meter-sub">${charges.length} charge${charges.length===1?"":"s"}${refs.length?" and "+refs.length+" refund"+(refs.length===1?"":"s"):""} not through yet</div>
     </div>
     <div class="card"><button class="btn sm ghost" data-tabjump="subs">Subscriptions · ${money(recurMonthly())} a month</button></div>
-    <div class="card flush" style="margin-top:12px">${body}</div>
+    <div class="card flush" style="margin-top:12px">${body}</div>${savBlock}
     <div class="card"><button class="btn sm ghost" id="clearAll">Mark everything as cleared</button></div>`;
 }
 
@@ -919,8 +965,7 @@ function renderPlan(){
   const spend=txIn(i).reduce((a,t)=>a+t.a,0);
   const income=incIn(i).reduce((a,t)=>a+t.a,0);
   const saved=savIn(i).reduce((a,t)=>a+t.a,0);
-  const carried=carriedInto(i);
-  const budget=rows.reduce((a,r)=>a+r.bud,0)+carried;
+  const budget=rows.reduce((a,r)=>a+r.bud,0);
   const planSpent=rows.reduce((a,r)=>a+r.spent,0);
   const left=budget-planSpent, over=left<0;
   const pct=budget>0?Math.min(100,planSpent/budget*100):(planSpent>0?100:0);
@@ -932,7 +977,7 @@ function renderPlan(){
   const hero=`<div class="card">
     <h2>${over?"Over plan by":"Left in the plan"}</h2>
     <div class="meter-amt num ${over?"over":""}">${money(Math.abs(left))}</div>
-    <div class="meter-sub num">${money(planSpent)} of ${money(budget)} allocated${carried?" (incl. "+money(carried)+" carried in)":""}</div>
+    <div class="meter-sub num">${money(planSpent)} of ${money(budget)} allocated</div>
     <div class="bar ${over?"over":""}"><div class="fill" style="width:${pct}%"></div>
       ${el>0&&el<28?`<div class="pace" style="left:${el/28*100}%"></div>`:""}</div>
     <div class="legend"><span>Day ${el} of 28</span><span>${daysLeft} days left</span></div>
@@ -943,24 +988,44 @@ function renderPlan(){
       <div class="stat"><b class="num" style="${leftover<0?'color:var(--over)':''}">${money0(leftover)}</b><span>left over</span></div>
     </div></div>`;
 
-  const alloc=rows.reduce((a,r)=>a+r.bud,0)+carried;
+  const alloc=rows.reduce((a,r)=>a+r.bud,0);
   const expIn=expectedIn(i),gotIn=sumOf(incIn(i)),toCome=Math.max(0,expIn-gotIn);
-  const onHand=freeToSpend(),cover=onHand+toCome,gap=cover-alloc;
-  const avg6=avgSpend(i,6);
+  const fromSav=savIncoming();
+  const opening=openingBal(i);
+  const spentClear=txIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
+  const savedOut=savIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
+  const pendOut=openBalance(),pre=preorders();
+  const onHand=freeToSpend(),cover=onHand+toCome+fromSav,gap=cover-alloc;
   const covPct=cover>0?Math.min(100,alloc/cover*100):(alloc>0?100:0);
+  const ln=(lab,val,note,cls)=>`<div class="row" style="padding:9px 15px">
+    <div class="main"><b style="font-weight:480;font-size:14.5px">${lab}</b>${note?`<span>${note}</span>`:""}</div>
+    <div class="amt num ${cls||""}" style="font-size:14.5px">${val<0?"−":""}${money(Math.abs(val))}</div></div>`;
   const adds=`<div class="card">
       <h2>Does the plan add up?</h2>
       <div class="meter-amt num ${gap<0?"over":""}" style="font-size:32px">${money(Math.abs(gap))}</div>
       <div class="meter-sub">${gap<0?"more allocated than you'll have":"spare after everything's allocated"}</div>
       <div class="bar ${gap<0?"over":""}" style="margin:14px 0 8px"><div class="fill" style="width:${covPct}%"></div></div>
-      <div class="legend"><span>${money(alloc)} allocated${carried?" · "+money(carried)+" carried":""}</span><span>${money(cover)} to cover it</span></div>
-      <div class="stats">
-        <div class="stat"><b class="num">${money0(onHand)}</b><span>free to spend</span></div>
-        <div class="stat in"><b class="num">${money0(toCome)}</b><span>still to come in</span></div>
-        <div class="stat"><b class="num">${money0(avg6)}</b><span>you usually spend</span></div>
-      </div>
-      <button class="btn sm ghost" data-expect="${i}">Expecting ${money(expIn)} in — change</button>
-      <button class="btn sm ghost" data-carry="${i}">${carried?money(carried)+" carried in":"Nothing carried in"} — change</button>
+      <div class="legend"><span>${money(alloc)} allocated</span><span>${money(cover)} to cover it</span></div>
+    </div>
+    <div class="card flush">
+      <div class="daylabel" style="border-top:none">Where that ${money(cover)} comes from</div>
+      ${ln("Left over when the cycle began",opening,"everything you hadn't spent yet")}
+      ${ln("Income so far",gotIn,null,"in")}
+      ${toCome?ln("Still expected in",toCome,"tap below to change","in"):""}
+      ${fromSav?ln("Coming out of savings",fromSav,null,"sv"):""}
+      ${spentClear?ln("Spent so far",-spentClear):""}
+      ${savedOut?ln("Put into savings",-savedOut,null,"sv"):""}
+      ${pendOut?ln("Charges not cleared",-pendOut,null,"over"):""}
+      ${pre?ln("Preorders",-pre):""}
+      <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>To cover the plan</b></div>
+        <div class="amt num">${money(cover)}</div></div>
+    </div>
+    <div class="card">
+      <div class="legend" style="margin-bottom:8px"><span>You usually spend</span><b class="num">${money(avgSpend(i,6))}</b></div>
+      <button class="btn sm ghost" data-expect="${i}">Expecting ${money(expIn)} in this cycle — change</button>
+      <button class="btn sm ghost" data-carry="${i}">Opening balance ${money(opening)} — adjust</button>
+      ${gap<0?`<button class="btn sm ghost" data-pullsav="${Math.abs(gap).toFixed(2)}"
+        style="color:var(--save);border-color:var(--save)">Cover the ${money(Math.abs(gap))} from savings</button>`:""}
     </div>`;
 
   const plan=`<div class="card" style="padding:14px 16px 4px">
@@ -975,7 +1040,7 @@ function renderPlan(){
         <div class="pr num ${ov?"":""}" style="${ov?'color:var(--over)':''}">${money(r.rem)}<small>${ov?"over":"left"}</small></div>
       </button>`;}).join("")}
       <div class="planline" style="background:var(--soft)">
-        <div class="pl"><b>Allocated altogether</b><span>${rows.filter(r=>r.bud>0).length} lines with a budget${carried?" · "+money(carried)+" carried in":""}</span></div>
+        <div class="pl"><b>Allocated altogether</b><span>${rows.filter(r=>r.bud>0).length} lines with a budget</span></div>
         <div class="pr num">${money(alloc)}</div></div>
       ${loose.length?`<button class="planline" data-loose="1">
         <div class="pl"><b>Not in the plan</b><span>${loose.length} entries with no matching line</span></div>
@@ -1067,13 +1132,6 @@ function renderSetup(){
     <div class="hint" style="margin:0 0 8px">Balances shown on the home page. Update them whenever you check the real account.</div>
     ${S.accounts.map(a=>`<button class="row" data-acc="${a.id}" style="padding:11px 0"><div class="main"><b>${esc(a.name)}</b><span>${esc(accKind(a)||"")}</span></div><div class="amt num">${money(accBal(a))}</div></button>`).join("")}
     <button class="btn sm ghost" data-acc="">Add an account</button>
-  </div>
-  <div class="card">
-    <h2>Carry over what's left</h2>
-    <div class="hint" style="margin:0 0 8px">When a cycle ends with budget unspent, add it to the next cycle's plan.
-      ${S.carry.on&&S.carry.from!=null?"Counting from "+fmtShort(cyc(S.carry.from).s)+" "+dOf(cyc(S.carry.from).s).getFullYear()+". Carried into this cycle: "+money(carriedInto(view.cycle))+".":"Off — each cycle starts from its own budget."}</div>
-    <div class="seg"><button id="carryOn" class="${S.carry.on?"on":""}">Carry it over</button>
-      <button id="carryOff" class="${S.carry.on?"":"on"}">Start fresh</button></div>
   </div>
   <div class="card">
     <h2>Copy a plan</h2>
@@ -1178,7 +1236,8 @@ function openEdit(id,kind){
     <div class="f"><span>Paid with</span><div id="eK"></div></div>`:""}
     <label class="f"><span>Date</span><input class="inp num" id="eD" type="date" value="${rec.d}"></label>
     ${kind==="sav"?`<div class="chips" style="margin-top:16px">
-      <button type="button" class="chip ${rec.a<0?"on":""}" id="eWd">${rec.a<0?"↩ Taken out":"Put away"}</button></div>`:""}
+      <button type="button" class="chip ${rec.a<0?"on":""}" id="eWd">${rec.a<0?"↩ Taken out":"Put away"}</button>
+      <button type="button" class="chip ${rec.p?"on":""}" id="eSp">${rec.p?"⏳ Not landed":"✓ Landed"}</button></div>`:""}
     ${kind==="tx"?`<div class="chips" style="margin-top:16px">
       <button type="button" class="chip ${rec.p?"on":""}" id="ePend">${rec.p?"⏳ Not cleared":"✓ Cleared"}</button>
       <button type="button" class="chip ${rec.a<0?"on":""}" id="eFlip">${rec.a<0?"↩ It's a refund":"Make it a refund"}</button>
@@ -1201,6 +1260,10 @@ function openEdit(id,kind){
       save();closeSheet();view.cycle=cycleFor(d);setTab("pending");toast("Refund logged as pending");};
   }
   if(kind==="sav"){
+    let sp=!!rec.p;
+    $("#eSp").onclick=()=>{sp=!sp;$("#eSp").classList.toggle("on",sp);
+      $("#eSp").textContent=sp?"⏳ Not landed":"✓ Landed";rec._sp=sp;};
+    rec._sp=sp;
     let wd=rec.a<0;
     $("#eWd").onclick=()=>{wd=!wd;$("#eWd").classList.toggle("on",wd);
       $("#eWd").textContent=wd?"↩ Taken out":"Put away";rec._w=wd;};
@@ -1236,7 +1299,8 @@ function openEdit(id,kind){
     const a=num($("#eA").value); if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
     rec.a=+a.toFixed(2); rec.n=$("#eN").value.trim()||rec.n;
     if($("#eD").value){rec.d=$("#eD").value;rec.y=cycleFor(rec.d);}
-    if(kind==="sav"){rec.a=rec._w?-Math.abs(rec.a):Math.abs(rec.a);delete rec._w;}
+    if(kind==="sav"){rec.a=rec._w?-Math.abs(rec.a):Math.abs(rec.a);
+      if(rec._sp)rec.p=1;else delete rec.p; delete rec._w;delete rec._sp;}
     if(kind==="tx"){rec.s=eCat.id||rec.s;rec.r=retIdFor(eRet.text);rec.k=eCard.id||rec.k;
       rec.a=rec._f?-Math.abs(rec.a):Math.abs(rec.a);
       if(rec._p)rec.p=1;else delete rec.p;
@@ -1444,6 +1508,7 @@ document.addEventListener("click",e=>{
   const fl=t.closest("[data-filter]");
   if(fl){const v=fl.dataset.filter;
     view.filter=v?{type:v.split(":")[0],id:v.split(":")[1]}:null;renderLog();return;}
+  const ps=t.closest("[data-pullsav]");if(ps)return openPullSav(ps.dataset.pullsav);
   const kc=t.closest("[data-carry]");if(kc)return openCarry(+kc.dataset.carry);
   const xp=t.closest("[data-expect]");if(xp)return openExpected(+xp.dataset.expect);
   const rc=t.closest("[data-recur]");if(rc)return openRecur(rc.dataset.recur);
@@ -1454,6 +1519,10 @@ document.addEventListener("click",e=>{
     view.pick=view.pick===i?null:i;renderStats();return;}
   const ct=t.closest("[data-cat]");if(ct){
     view.openCat=view.openCat===ct.dataset.cat?null:ct.dataset.cat;renderStats();return;}
+  const cs=t.closest("[data-clearsav]");if(cs){
+    const rec=S.sav.find(x=>x.id===cs.dataset.clearsav);
+    if(rec){delete rec.p;save();render();toast(money(Math.abs(rec.a))+" landed");}
+    return;}
   const cl=t.closest("[data-clear]");if(cl){
     const rec=S.tx.find(x=>x.id===cl.dataset.clear);
     if(rec){delete rec.p;save();render();toast(money(Math.abs(rec.a))+" marked cleared");}
@@ -1461,8 +1530,8 @@ document.addEventListener("click",e=>{
   switch(t.id){
     case "openSetup":setTab("setup");return;
     case "clearAll":
-      if(confirm("Mark all "+pendingTx().length+" pending entries as cleared?")){
-        S.tx.forEach(x=>{delete x.p;});save();render();toast("All cleared");}
+      if(confirm("Mark all "+(pendingTx().length+pendSav().length)+" pending entries as cleared?")){
+        S.tx.forEach(x=>{delete x.p;});S.sav.forEach(x=>{delete x.p;});save();render();toast("All cleared");}
       return;
   }
   switch(t.id){
@@ -1477,10 +1546,6 @@ document.addEventListener("click",e=>{
                 sav:$("#lbSav").value.trim()||"Total savings"};
       save();render();toast("Names saved");break;
     case "saveSettings":S.settings.symbol=$("#setSym").value.trim()||"$";save();render();toast("Saved");break;
-    case "carryOn":
-      S.carry={on:1,from:S.carry.from==null?nowCycle():S.carry.from};save();render();
-      toast("Leftovers roll forward from "+fmtShort(cyc(S.carry.from).s));break;
-    case "carryOff": S.carry={on:0,from:S.carry.from};save();render();toast("Each cycle starts fresh");break;
     case "copyPrev":{
       const p=S.budgets[String(view.cycle-1)];
       if(!p){toast("No plan on the previous cycle");break;}
