@@ -1,0 +1,16 @@
+{
+  "name": "Cycle — budget ledger",
+  "short_name": "Cycle",
+  "description": "Four-week budget cycles, categories, pending balance and stats. All data stays on the device.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#E9EDEB",
+  "theme_color": "#1F5E52",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
