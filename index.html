@@ -217,6 +217,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
       <div class="chips" style="margin-top:16px">
         <button type="button" class="chip" id="tPending">⏳ Hasn't cleared yet</button>
         <button type="button" class="chip" id="tRefund">↩ Money coming back</button>
+        <button type="button" class="chip" id="tWithdraw">↩ Taking money out</button>
       </div>
       <button class="btn" id="saveEntry">Add spending</button>
     </div>
@@ -273,6 +274,7 @@ function load(){
     setTimeout(()=>toast("Rebuilt from your sheet"),900);
   }
   if(!S.recur){S.recur=JSON.parse(JSON.stringify(RECUR));}
+  S.carry=Object.assign({on:0,from:null},S.carry||{});
   S.labels=Object.assign({net:"Net worth",free:"Free to spend",sav:"Total savings"},S.labels||{});
   if(S.accountsV!==5){
     const keep=(S.accounts||[]).reduce((m,a)=>(m[a.name]=a,m),{});
@@ -469,6 +471,51 @@ function render(){
   if(view.tab==="plan")renderPlan();
   if(view.tab==="log")renderLog();
   if(view.tab==="setup")renderSetup();
+}
+
+/* ---------- carry-over ---------- */
+function planTotals(i){
+  const b=S.budgets[String(i)]||{},list=txIn(i),used=new Set();
+  let alloc=0,spent=0;
+  for(const l of S.lines){
+    alloc+=b[l.id]||0;
+    if(l.kind==="savings"){spent+=sumOf(savIn(i));continue;}
+    for(const t of list){if(used.has(t.id))continue;if(lineMatches(l,t)){spent+=t.a;used.add(t.id);}}
+  }
+  return {alloc,spent};
+}
+function carriedInto(i){
+  const c=S.carry||{},ov=c.set||{};
+  if(ov[String(i)]!=null)return ov[String(i)];      /* you set it by hand */
+  if(!c.on||c.from==null||i<=c.from)return 0;
+  let carry=0;
+  for(let k=c.from;k<i;k++){
+    if(ov[String(k)]!=null)carry=ov[String(k)];      /* a hand-set figure resets the chain */
+    const t=planTotals(k);carry=carry+t.alloc-t.spent;
+  }
+  return +carry.toFixed(2);
+}
+function openCarry(i){
+  const c=S.carry||{},ov=(c.set||{}),fixed=ov[String(i)]!=null;
+  const auto=(()=>{const save=c.set;S.carry.set={};const v=carriedInto(i);S.carry.set=save;return v;})();
+  openSheet(`<div class="sheethead"><h3>Carried into this cycle</h3>
+    <span class="hint" style="margin:0">${fmtShort(cyc(i).s)} – ${fmtShort(cyc(i).e)}</span>
+    <button class="close" data-close>×</button></div>
+    <label class="f"><span>Leftover brought forward</span>
+      <div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
+        <input class="num" id="kA" type="text" inputmode="decimal" value="${fixed?ov[String(i)]:""}" placeholder="0.00"></div></label>
+    <div class="hint">${fixed?"You set this by hand. Worked out automatically it would be "+money(auto)+"."
+      :"Left alone it works out to "+money(auto)+" from the last cycle's unspent budget."}
+      Anything you set here becomes the new starting point — later cycles chain on from it.</div>
+    <button class="btn" id="kSave">Use this figure</button>
+    <button class="btn sm ghost" id="kZero">Start this cycle from zero</button>
+    ${fixed?`<button class="btn sm ghost" id="kAuto">Go back to working it out</button>`:""}`);
+  const put=v=>{S.carry.set=S.carry.set||{};S.carry.set[String(i)]=v;
+    if(!S.carry.on){S.carry.on=1;if(S.carry.from==null)S.carry.from=i;}
+    save();closeSheet();render();toast("Carried in: "+money(v));};
+  $("#kSave").onclick=()=>{const v=num($("#kA").value);put(isFinite(v)?+v.toFixed(2):0);};
+  $("#kZero").onclick=()=>put(0);
+  if(fixed)$("#kAuto").onclick=()=>{delete S.carry.set[String(i)];save();closeSheet();render();toast("Back to automatic");};
 }
 
 /* ---------- expected income ---------- */
@@ -872,7 +919,8 @@ function renderPlan(){
   const spend=txIn(i).reduce((a,t)=>a+t.a,0);
   const income=incIn(i).reduce((a,t)=>a+t.a,0);
   const saved=savIn(i).reduce((a,t)=>a+t.a,0);
-  const budget=rows.reduce((a,r)=>a+r.bud,0);
+  const carried=carriedInto(i);
+  const budget=rows.reduce((a,r)=>a+r.bud,0)+carried;
   const planSpent=rows.reduce((a,r)=>a+r.spent,0);
   const left=budget-planSpent, over=left<0;
   const pct=budget>0?Math.min(100,planSpent/budget*100):(planSpent>0?100:0);
@@ -884,7 +932,7 @@ function renderPlan(){
   const hero=`<div class="card">
     <h2>${over?"Over plan by":"Left in the plan"}</h2>
     <div class="meter-amt num ${over?"over":""}">${money(Math.abs(left))}</div>
-    <div class="meter-sub num">${money(planSpent)} of ${money(budget)} allocated</div>
+    <div class="meter-sub num">${money(planSpent)} of ${money(budget)} allocated${carried?" (incl. "+money(carried)+" carried in)":""}</div>
     <div class="bar ${over?"over":""}"><div class="fill" style="width:${pct}%"></div>
       ${el>0&&el<28?`<div class="pace" style="left:${el/28*100}%"></div>`:""}</div>
     <div class="legend"><span>Day ${el} of 28</span><span>${daysLeft} days left</span></div>
@@ -895,7 +943,7 @@ function renderPlan(){
       <div class="stat"><b class="num" style="${leftover<0?'color:var(--over)':''}">${money0(leftover)}</b><span>left over</span></div>
     </div></div>`;
 
-  const alloc=rows.reduce((a,r)=>a+r.bud,0);
+  const alloc=rows.reduce((a,r)=>a+r.bud,0)+carried;
   const expIn=expectedIn(i),gotIn=sumOf(incIn(i)),toCome=Math.max(0,expIn-gotIn);
   const onHand=freeToSpend(),cover=onHand+toCome,gap=cover-alloc;
   const avg6=avgSpend(i,6);
@@ -905,13 +953,14 @@ function renderPlan(){
       <div class="meter-amt num ${gap<0?"over":""}" style="font-size:32px">${money(Math.abs(gap))}</div>
       <div class="meter-sub">${gap<0?"more allocated than you'll have":"spare after everything's allocated"}</div>
       <div class="bar ${gap<0?"over":""}" style="margin:14px 0 8px"><div class="fill" style="width:${covPct}%"></div></div>
-      <div class="legend"><span>${money(alloc)} allocated</span><span>${money(cover)} to cover it</span></div>
+      <div class="legend"><span>${money(alloc)} allocated${carried?" · "+money(carried)+" carried":""}</span><span>${money(cover)} to cover it</span></div>
       <div class="stats">
         <div class="stat"><b class="num">${money0(onHand)}</b><span>free to spend</span></div>
         <div class="stat in"><b class="num">${money0(toCome)}</b><span>still to come in</span></div>
         <div class="stat"><b class="num">${money0(avg6)}</b><span>you usually spend</span></div>
       </div>
       <button class="btn sm ghost" data-expect="${i}">Expecting ${money(expIn)} in — change</button>
+      <button class="btn sm ghost" data-carry="${i}">${carried?money(carried)+" carried in":"Nothing carried in"} — change</button>
     </div>`;
 
   const plan=`<div class="card" style="padding:14px 16px 4px">
@@ -926,7 +975,7 @@ function renderPlan(){
         <div class="pr num ${ov?"":""}" style="${ov?'color:var(--over)':''}">${money(r.rem)}<small>${ov?"over":"left"}</small></div>
       </button>`;}).join("")}
       <div class="planline" style="background:var(--soft)">
-        <div class="pl"><b>Allocated altogether</b><span>${rows.filter(r=>r.bud>0).length} lines with a budget</span></div>
+        <div class="pl"><b>Allocated altogether</b><span>${rows.filter(r=>r.bud>0).length} lines with a budget${carried?" · "+money(carried)+" carried in":""}</span></div>
         <div class="pr num">${money(alloc)}</div></div>
       ${loose.length?`<button class="planline" data-loose="1">
         <div class="pl"><b>Not in the plan</b><span>${loose.length} entries with no matching line</span></div>
@@ -959,8 +1008,8 @@ function renderPlan(){
   const money2=`<div class="card flush">
     <div class="daylabel" style="border-top:none">Money in</div>
     ${inc.length?inc.map(e=>`<button class="row" data-edit="${e.id}" data-kind="inc"><div class="main"><b>${esc(e.n)}</b><span>${fmtShort(e.d)}</span></div><div class="amt in num">${money(e.a,true)}</div></button>`).join(""):`<div class="empty" style="padding:16px">No income this cycle.</div>`}
-    <div class="daylabel">Moved to savings</div>
-    ${sv.length?sv.map(e=>`<button class="row" data-edit="${e.id}" data-kind="sav"><div class="main"><b>${esc(e.n)}</b><span>${fmtShort(e.d)}</span></div><div class="amt sv num">${money(e.a)}</div></button>`).join(""):`<div class="empty" style="padding:16px">Nothing set aside this cycle.</div>`}
+    <div class="daylabel">Savings, in and out</div>
+    ${sv.length?sv.map(e=>`<button class="row" data-edit="${e.id}" data-kind="sav"><div class="main"><b>${esc(e.n)}</b><span>${fmtShort(e.d)}${e.a<0?" · taken out":""}</span></div><div class="amt sv num" style="${e.a<0?"color:var(--over)":""}">${money(e.a)}</div></button>`).join(""):`<div class="empty" style="padding:16px">Nothing set aside this cycle.</div>`}
   </div>`;
   $("#p-plan").innerHTML=hero+adds+plan+rollHtml+money2;
 }
@@ -1020,6 +1069,13 @@ function renderSetup(){
     <button class="btn sm ghost" data-acc="">Add an account</button>
   </div>
   <div class="card">
+    <h2>Carry over what's left</h2>
+    <div class="hint" style="margin:0 0 8px">When a cycle ends with budget unspent, add it to the next cycle's plan.
+      ${S.carry.on&&S.carry.from!=null?"Counting from "+fmtShort(cyc(S.carry.from).s)+" "+dOf(cyc(S.carry.from).s).getFullYear()+". Carried into this cycle: "+money(carriedInto(view.cycle))+".":"Off — each cycle starts from its own budget."}</div>
+    <div class="seg"><button id="carryOn" class="${S.carry.on?"on":""}">Carry it over</button>
+      <button id="carryOff" class="${S.carry.on?"":"on"}">Start fresh</button></div>
+  </div>
+  <div class="card">
     <h2>Copy a plan</h2>
     <div class="hint" style="margin:0 0 8px">Reuse the budget amounts from another cycle for the one you're viewing.</div>
     <button class="btn sm ghost" id="copyPrev">Copy the previous cycle's plan</button>
@@ -1056,18 +1112,23 @@ function setMode(m){
   $("#mSpend").classList.toggle("on",m==="spend");
   $("#mIncome").classList.toggle("on",m==="income");
   $("#mSave").classList.toggle("on",m==="save");
-  $("#lblAmount").textContent=m!=="spend"?"Amount":view.refund?"Refund amount":"Price";
-  $("#lblName").textContent=m==="spend"?"Item name":m==="income"?"From":"Moved to";
+  $("#lblAmount").textContent=m==="save"?(view.wdraw?"Amount to take out":"Amount to put away"):m==="income"?"Amount":view.refund?"Refund amount":"Price";
+  $("#lblName").textContent=m==="spend"?"Item name":m==="income"?"From":view.wdraw?"Taken from":"Moved to";
   $("#fName").placeholder=m==="spend"?"e.g. Bounty Hunter Funko":m==="income"?"e.g. Raytheon":"e.g. Apple Savings";
   for(const el of ["wCat","wRet","wCard"]) $("#"+el).style.display=m==="spend"?"":"none";
   $("#tRefund").style.display=m==="spend"?"":"none";
+  $("#tPending").style.display=m==="spend"?"":"none";
+  $("#tWithdraw").style.display=m==="save"?"":"none";
+  $("#tWithdraw").classList.toggle("on",!!view.wdraw);
   $("#tPending").classList.toggle("on",!!view.pend);
   $("#tRefund").classList.toggle("on",!!view.refund);
-  $("#saveEntry").textContent=m!=="spend"?(m==="income"?"Add income":"Add to savings")
+  $("#saveEntry").textContent=m==="income"?"Add income"
+    :m==="save"?(view.wdraw?"Take out of savings":"Add to savings")
     :view.refund?"Log the refund":"Add spending";
 }
 $("#tPending").onclick=()=>{view.pend=!view.pend;setMode(view.mode);};
 $("#tRefund").onclick=()=>{view.refund=!view.refund;setMode(view.mode);};
+$("#tWithdraw").onclick=()=>{view.wdraw=!view.wdraw;setMode(view.mode);};
 $("#mSpend").onclick=()=>setMode("spend");
 $("#mIncome").onclick=()=>setMode("income");
 $("#mSave").onclick=()=>setMode("save");
@@ -1096,11 +1157,13 @@ $("#saveEntry").onclick=()=>{
     if(view.pend)rec.p=1;
     S.tx.push(rec);
   } else if(view.mode==="income") S.inc.push({id:uid("i"),d:view.date,n:n||"Income",a:+a.toFixed(2),y});
-  else S.sav.push({id:uid("v"),d:view.date,n:n||"Savings",a:+a.toFixed(2),y});
+  else S.sav.push({id:uid("v"),d:view.date,n:n||(view.wdraw?"Withdrawal":"Savings"),
+                   a:+((view.wdraw?-a:a).toFixed(2)),y});
   save();$("#fAmount").value="";$("#fName").value="";
   view.cycle=y;
-  toast(view.mode==="spend"&&view.refund?"Refund of "+money(a)+" logged":"Added "+money(a));
-  view.refund=false;setMode(view.mode);render();
+  toast(view.mode==="spend"&&view.refund?"Refund of "+money(a)+" logged"
+       :view.mode==="save"&&view.wdraw?money(a)+" taken out of savings":"Added "+money(a));
+  view.refund=false;view.wdraw=false;setMode(view.mode);render();
 };
 
 /* ---------- edit ---------- */
@@ -1114,6 +1177,8 @@ function openEdit(id,kind){
     <div class="f"><span>Retailer</span><div id="eR"></div></div>
     <div class="f"><span>Paid with</span><div id="eK"></div></div>`:""}
     <label class="f"><span>Date</span><input class="inp num" id="eD" type="date" value="${rec.d}"></label>
+    ${kind==="sav"?`<div class="chips" style="margin-top:16px">
+      <button type="button" class="chip ${rec.a<0?"on":""}" id="eWd">${rec.a<0?"↩ Taken out":"Put away"}</button></div>`:""}
     ${kind==="tx"?`<div class="chips" style="margin-top:16px">
       <button type="button" class="chip ${rec.p?"on":""}" id="ePend">${rec.p?"⏳ Not cleared":"✓ Cleared"}</button>
       <button type="button" class="chip ${rec.a<0?"on":""}" id="eFlip">${rec.a<0?"↩ It's a refund":"Make it a refund"}</button>
@@ -1134,6 +1199,12 @@ function openEdit(id,kind){
       const d=todayIso();
       S.tx.push({id:uid("t"),d,n:rec.n+" (refund)",a:-Math.abs(rec.a),s:rec.s,r:rec.r,k:rec.k,y:cycleFor(d),p:1});
       save();closeSheet();view.cycle=cycleFor(d);setTab("pending");toast("Refund logged as pending");};
+  }
+  if(kind==="sav"){
+    let wd=rec.a<0;
+    $("#eWd").onclick=()=>{wd=!wd;$("#eWd").classList.toggle("on",wd);
+      $("#eWd").textContent=wd?"↩ Taken out":"Put away";rec._w=wd;};
+    rec._w=wd;
   }
   let eCat,eRet,eCard;
   if(kind==="tx"){
@@ -1165,6 +1236,7 @@ function openEdit(id,kind){
     const a=num($("#eA").value); if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
     rec.a=+a.toFixed(2); rec.n=$("#eN").value.trim()||rec.n;
     if($("#eD").value){rec.d=$("#eD").value;rec.y=cycleFor(rec.d);}
+    if(kind==="sav"){rec.a=rec._w?-Math.abs(rec.a):Math.abs(rec.a);delete rec._w;}
     if(kind==="tx"){rec.s=eCat.id||rec.s;rec.r=retIdFor(eRet.text);rec.k=eCard.id||rec.k;
       rec.a=rec._f?-Math.abs(rec.a):Math.abs(rec.a);
       if(rec._p)rec.p=1;else delete rec.p;
@@ -1372,6 +1444,7 @@ document.addEventListener("click",e=>{
   const fl=t.closest("[data-filter]");
   if(fl){const v=fl.dataset.filter;
     view.filter=v?{type:v.split(":")[0],id:v.split(":")[1]}:null;renderLog();return;}
+  const kc=t.closest("[data-carry]");if(kc)return openCarry(+kc.dataset.carry);
   const xp=t.closest("[data-expect]");if(xp)return openExpected(+xp.dataset.expect);
   const rc=t.closest("[data-recur]");if(rc)return openRecur(rc.dataset.recur);
   const ac=t.closest("[data-acc]");if(ac)return openAccount(ac.dataset.acc);
@@ -1404,6 +1477,10 @@ document.addEventListener("click",e=>{
                 sav:$("#lbSav").value.trim()||"Total savings"};
       save();render();toast("Names saved");break;
     case "saveSettings":S.settings.symbol=$("#setSym").value.trim()||"$";save();render();toast("Saved");break;
+    case "carryOn":
+      S.carry={on:1,from:S.carry.from==null?nowCycle():S.carry.from};save();render();
+      toast("Leftovers roll forward from "+fmtShort(cyc(S.carry.from).s));break;
+    case "carryOff": S.carry={on:0,from:S.carry.from};save();render();toast("Each cycle starts fresh");break;
     case "copyPrev":{
       const p=S.budgets[String(view.cycle-1)];
       if(!p){toast("No plan on the previous cycle");break;}
