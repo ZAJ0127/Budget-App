@@ -748,7 +748,9 @@ function renderSubs(){
     <div class="card flush">${rows||'<div class="empty"><b>No subscriptions yet</b>Add one and it will charge itself on the day you set.</div>'}</div>
     ${due.length?`<div class="card"><div class="legend"><span>${due.length} due this cycle</span><b class="num">${money(due.reduce((a,r)=>a+ +r.a,0))}</b></div></div>`:""}
     <div class="card">
-      <div class="hint" style="margin:0 0 8px">On its due date each one adds itself to Pending. Tick it off there when the charge actually lands.</div>
+      <div class="hint" style="margin:0 0 8px">On its due date each one adds itself to Pending — tick it off there when the charge lands.
+        A new subscription won't charge for a date in the past unless you set one; open any subscription and use
+        <b>Charge it now</b> if you've just been billed.</div>
       <button class="btn sm ghost" data-recur="">Add a subscription</button>
     </div>`;
 }
@@ -770,7 +772,8 @@ function openRecur(id){
       ${r?`<button type="button" class="chip" id="qSkip">Skip the next one</button>`:""}
     </div>
     <button class="btn" id="qSave">${r?"Save":"Add subscription"}</button>
-    ${r?`<button class="btn sm danger" id="qDel">Delete</button>`:""}`);
+    ${r?`<button class="btn sm ghost" id="qNow">Charge it now — put ${money(r.a)} in Pending</button>
+    <button class="btn sm danger" id="qDel">Delete</button>`:""}`);
   const qCat=combo($("#qS"),catItems,{value:r?r.s:(S.subs[0]||{}).id,allowNew:true,
     newLabel:"Add a new category called", onNew:(txt,pick)=>newCategoryFlow(txt,pick)});
   const qRet=combo($("#qR"),retItems,{value:r?r.r:"",allowNew:true});
@@ -786,7 +789,18 @@ function openRecur(id){
     const o={n,a:+a.toFixed(2),freq:$("#qF").value,next,day:dOf(next).getDate(),
              s:qCat.id||(S.subs[0]||{}).id,r:retIdFor(qRet.text),k:qCard.id||(S.cards[0]||{}).id,on:on?1:0};
     if(r)Object.assign(r,o);else (S.recur=S.recur||[]).push(Object.assign({id:uid("q")},o));
-    save();closeSheet();render();toast("Saved");};
+    const fired=runRecurring();
+    save();closeSheet();
+    if(fired.made){view.cycle=nowCycle();setTab("pending");
+      toast(fired.made+" charge"+(fired.made===1?"":"s")+" added to Pending");}
+    else{render();toast("Saved · first charge "+fmtShort(o.next));}};
+  if(r)$("#qNow").onclick=()=>{
+    const d=todayIso();
+    S.tx.push({id:uid("t"),ts:Date.now(),d,n:r.n,a:+(+r.a).toFixed(2),s:r.s,r:r.r,k:r.k,
+               y:cycleFor(d),p:1,src:r.id});
+    r.next=advance(r,d);
+    save();closeSheet();view.cycle=cycleFor(d);setTab("pending");
+    toast(money(r.a)+" in Pending · next on "+fmtShort(r.next));};
   if(r)$("#qDel").onclick=()=>{
     if(!confirm("Delete "+r.n+"? Charges it already made stay put."))return;
     S.recur=S.recur.filter(x=>x.id!==id);save();closeSheet();render();toast("Deleted");};
