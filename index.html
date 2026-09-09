@@ -1283,14 +1283,28 @@ function openFilters(){
       <button class="chip ${custom?"on":""}" data-range="custom">Between dates</button></div>
       ${custom?`<div class="rangewrap"><label>From<input type="date" id="rFrom" value="${R.from}"></label>
         <label>To<input type="date" id="rTo" value="${R.to}"></label></div>`:""}</div>
+    <div class="f"><span>Category</span><div id="filtCat"></div></div>
     <div class="f"><span>Paid with</span><div class="chips">
-      <button class="chip ${view.filter?"":"on"}" data-filter="">Any card</button>
-      ${cards.map(c=>`<button class="chip ${view.filter&&view.filter.id===c.id?"on":""}" data-filter="card:${c.id}">${esc(c.name)}</button>`).join("")}</div></div>
+      <button class="chip ${view.filter&&view.filter.type==="card"?"":"on"}" data-filter="">Any card</button>
+      ${cards.map(c=>`<button class="chip ${view.filter&&view.filter.type==="card"&&view.filter.id===c.id?"on":""}" data-filter="card:${c.id}">${esc(c.name)}</button>`).join("")}</div></div>
     <div class="f"><span>Order</span><div class="seg">
       <button class="${view.byAdded?"":"on"}" data-sort="date">By date</button>
       <button class="${view.byAdded?"on":""}" data-sort="added">As I added them</button></div></div>
     <button class="btn" data-close>Show entries</button>
     ${activeFilterCount()?`<button class="btn sm ghost" id="clearFilters">Clear filters</button>`:""}`);
+  const catFilterItems=()=>{
+    const out=[];
+    for(const g of S.groups)for(const c of catsOfGroup(g.id)){
+      out.push({id:"cat:"+c.id,name:c.name,sub:g.name+" — whole category"});
+      for(const x of subsOfCat(c.id))out.push({id:"sub:"+x.id,name:x.name,sub:g.name+" › "+c.name});
+    }
+    return out;
+  };
+  const cur=view.filter&&(view.filter.type==="cat"||view.filter.type==="sub")?view.filter.type+":"+view.filter.id:"";
+  const cCombo=combo($("#filtCat"),catFilterItems,{value:cur,placeholder:"Any category",
+    onPick:(v)=>{if(!v){view.filter=null;render();return;}
+      const[t,id]=v.split(":");view.filter={type:t,id};render();}});
+  if(!cur)cCombo.set("");
 }
 function renderLog(){
   const q=(view.q||"").trim(),R=view.range||"cycle",nf=activeFilterCount();
@@ -1298,14 +1312,14 @@ function renderLog(){
   if(q)items=items.concat(S.inc.map(r=>[r,"inc"]),S.sav.map(r=>[r,"sav"]));
   items=items.filter(([r,k])=>inRange(r.d,r.y)&&logMatches(r,k));
   if(view.filter&&!q){const f=view.filter;
-    items=items.filter(([r,k])=>k!=="tx"?false:f.type==="card"?r.k===f.id:f.type==="cat"?(catOf(r.s)||{}).id===f.id:true);}
+    items=items.filter(([r,k])=>k!=="tx"?false:f.type==="card"?r.k===f.id:f.type==="cat"?(catOf(r.s)||{}).id===f.id:f.type==="sub"?r.s===f.id:true);}
   const spendTot=items.filter(([r,k])=>k==="tx").reduce((a,[r])=>a+r.a,0);
   const scope=R==="cycle"?"":R==="c3"?"Last 3 cycles":R==="all"?"All time":(R.from?fmtShort(R.from)+" – "+fmtShort(R.to):"");
   const head=`<div class="card" style="padding:12px 14px">
       <div class="two"><div class="searchwrap" style="flex:1"><input class="inp" id="logQ" value="${esc(q)}" placeholder="Search" autocomplete="off">
           ${q?`<button id="logQx" aria-label="Clear">×</button>`:""}</div>
         <button class="chip ${nf?"on":""}" id="openFilters" style="flex:none">Filters${nf?" · "+nf:""}</button></div>
-      <div class="legend" style="margin-top:9px"><span>${items.length} ${q?"match"+(items.length===1?"":"es"):"entr"+(items.length===1?"y":"ies")}${scope?" · "+scope:""}${view.filter?" · "+esc(cardName(view.filter.id)):""}</span><b class="num">${money(spendTot)}</b></div>
+      <div class="legend" style="margin-top:9px"><span>${items.length} ${q?"match"+(items.length===1?"":"es"):"entr"+(items.length===1?"y":"ies")}${scope?" · "+scope:""}${view.filter?" · "+esc(view.filter.type==="card"?cardName(view.filter.id):view.filter.type==="sub"?subName(view.filter.id):(byId(S.cats,view.filter.id)||{}).name):""}</span><b class="num">${money(spendTot)}</b></div>
     </div>`;
   if(!items.length){
     $("#p-log").innerHTML=head+`<div class="card flush"><div class="empty">
@@ -1713,6 +1727,7 @@ function openItem(kind,id){
     ${extra}
     ${used?`<div class="hint" style="margin-top:10px">Used by ${used} entries.</div>`:""}
     <button class="btn" id="iSave">${it?"Save":"Add"}</button>
+    ${it&&kind==="cat"?`<button class="btn sm ghost" id="iMerge">Move into another category</button>`:""}
     ${it?`<button class="btn sm danger" id="iDel">Delete</button>`:""}`);
   let iPar=null,iGrp=it&&kind==="cat"?it.g:S.groups[0].id;
   if(kind==="cat"){
@@ -1738,9 +1753,32 @@ function openItem(kind,id){
       else if(kind==="ret")S.retailers.push(o); else S.cards.push(o);
     }
     save();fillSelects();closeSheet();openList(kind==="sub"?"cat":kind);render();toast("Saved");};
+  if(it&&kind==="cat")$("#iMerge").onclick=()=>{
+    const targets=S.cats.filter(c=>c.id!==it.id).map(c=>({id:c.id,name:c.name,sub:(byId(S.groups,c.g)||{}).name}));
+    const mySubs=subsOfCat(it.id);
+    openSheet(`<div class="sheethead"><h3>Move “${esc(it.name)}”</h3><button class="close" data-close>×</button></div>
+      <div class="hint" style="margin:10px 0 0">Categories can't nest inside each other — only sub-categories can.
+        So moving “${esc(it.name)}” into another category turns ${mySubs.length?"its "+mySubs.length+" sub-categor"+(mySubs.length===1?"y":"ies"):"it"} into
+        sub-categor${mySubs.length===1?"y":"ies"} there, and “${esc(it.name)}” itself goes away.</div>
+      <div class="f"><span>Move into</span><div id="mergeTo"></div></div>
+      <button class="btn" id="mergeGo">Move it</button>`);
+    const mv=combo($("#mergeTo"),()=>targets,{placeholder:"Type or pick a category"});
+    $("#mergeGo").onclick=()=>{
+      const to=mv.id;if(!to){toast("Pick a category to move it into");return;}
+      const dest=byId(S.cats,to);
+      if(mySubs.length){
+        mySubs.forEach(s=>{s.c=to;});
+      } else {
+        S.subs.push({id:uid("s"),name:it.name,c:to});
+      }
+      S.cats=S.cats.filter(c=>c.id!==it.id);
+      save();fillSelects();closeSheet();openList("cat");render();
+      toast("Moved into "+dest.name);
+    };
+  };
   if(it)$("#iDel").onclick=()=>{
     if(kind==="cat"&&subsOfCat(it.id).length){
-      toast("Move or delete its sub-categories first");return;}
+      toast("It has sub-categories — use “Move into another category” above, or delete those first");return;}
     if(!used){
       if(!confirm("Delete “"+it.name+"”?"))return;
       arr.splice(arr.indexOf(it),1);
