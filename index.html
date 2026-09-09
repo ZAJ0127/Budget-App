@@ -274,6 +274,7 @@ function load(){
     setTimeout(()=>toast("Rebuilt from your sheet"),900);
   }
   if(!S.recur){S.recur=JSON.parse(JSON.stringify(RECUR));}
+  if(S.settings.floor==null)S.settings.floor=0;
   S.carry=Object.assign({on:0,from:null},S.carry||{});
   S.labels=Object.assign({net:"Net worth",free:"Free to spend",sav:"Total savings"},S.labels||{});
   if(S.accountsV!==5){
@@ -473,6 +474,18 @@ function render(){
   if(view.tab==="plan")renderPlan();
   if(view.tab==="log")renderLog();
   if(view.tab==="setup")renderSetup();
+}
+
+/* ---------- low-balance guard ---------- */
+const floorOf=()=>+S.settings.floor||0;
+function lowWarning(){
+  const free=freeToSpend(),f=floorOf(),pend=openBalance();
+  if(free>=f)return "";
+  const short=f-free;
+  return `<div class="banner" style="background:#F7DED8;border-color:#DFB0A6;color:#7A2A1E">
+    <b>${free<0?"Pending charges take you past zero":"Below the cushion you set"}</b><br>
+    Once ${money(pend)} of pending clears you'd be at ${money(free)}${f?", against a "+money(f)+" cushion":""}.
+    That's ${money(short)} short.</div>`;
 }
 
 /* ---------- carry-over ---------- */
@@ -898,7 +911,7 @@ function renderStats(){
         <div class="stat"><b class="num">${money0(cBud)}</b><span>planned</span></div>
       </div></div>`;
 
-  $("#p-stats").innerHTML=balances+thisCycle+
+  $("#p-stats").innerHTML=lowWarning()+balances+thisCycle+
     `<div class="card" style="padding:14px 16px 4px"><h2 style="margin:0">History</h2></div>`+
     picker+kpis+chart1+chart2+
     `<div class="card" style="padding:14px 16px 4px"><h2 style="margin:0">By category — tap to open up</h2></div>
@@ -949,11 +962,15 @@ function renderPending(){
         <span>${fmtShort(t.d)} · ${esc(subName(t.s))}${t.r?" · "+esc(retName(t.r)):""}</span></button>
       ${amtHtml(t.a)}</div>`).join("");
   }
-  $("#p-pending").innerHTML=`
+  $("#p-pending").innerHTML=lowWarning()+`
     <div class="card">
       <h2>Open balance</h2>
       <div class="meter-amt num">${money(total)}</div>
       <div class="meter-sub">${charges.length} charge${charges.length===1?"":"s"}${refs.length?" and "+refs.length+" refund"+(refs.length===1?"":"s"):""} not through yet</div>
+      <div class="stats">
+        <div class="stat"><b class="num">${money(bankBal())}</b><span>in checking now</span></div>
+        <div class="stat"><b class="num" style="${freeToSpend()<floorOf()?"color:var(--over)":""}">${money(freeToSpend())}</b><span>once it all clears</span></div>
+      </div>
     </div>
     <div class="card"><button class="btn sm ghost" data-tabjump="subs">Subscriptions · ${money(recurMonthly())} a month</button></div>
     <div class="card flush" style="margin-top:12px">${body}</div>${savBlock}
@@ -1144,6 +1161,10 @@ function renderSetup(){
       <div class="seg"><button id="dfMDY" class="${s.dateFormat==="MDY"?"on":""}">Month / Day</button>
       <button id="dfDMY" class="${s.dateFormat==="DMY"?"on":""}">Day / Month</button></div></label>
     <label class="f"><span>Currency symbol</span><input class="inp" id="setSym" value="${esc(s.symbol)}" maxlength="3"></label>
+    <label class="f"><span>Warn me if checking would drop below</span>
+      <div class="money-in sm"><i>${esc(s.symbol)}</i>
+        <input class="num" id="setFloor" type="text" inputmode="decimal" value="${s.floor||""}" placeholder="0.00"></div>
+      <div class="hint">Counts pending charges as already gone. Set 0 to be warned only about going negative.</div></label>
     <button class="btn sm" id="saveSettings">Save settings</button>
   </div>
   <div class="card">
@@ -1208,6 +1229,15 @@ $("#saveEntry").onclick=()=>{
   const a=num($("#fAmount").value);
   if(!isFinite(a)||a<=0){toast("Enter an amount above zero");$("#fAmount").focus();return;}
   const n=$("#fName").value.trim(),y=cycleFor(view.date);
+  let delta=0;
+  if(view.mode==="spend")delta=view.refund?a:-a;
+  else if(view.mode==="income")delta=a;
+  else delta=view.wdraw?a:-a;
+  if(delta<0){
+    const after=freeToSpend()+delta,f=floorOf();
+    if(after<f&&!confirm("That leaves "+money(after)+(f?" against your "+money(f)+" cushion":" in checking")+
+       ".\n\nAdd it anyway?"))return;
+  }
   if(view.mode==="spend"){
     const sid=cCat.id||(S.subs[0]||{}).id,amt=view.refund?-Math.abs(a):a;
     const rec={id:uid("t"),d:view.date,n:n||subName(sid),a:+amt.toFixed(2),s:sid,
@@ -1545,7 +1575,10 @@ document.addEventListener("click",e=>{
                 free:$("#lbFree").value.trim()||"Free to spend",
                 sav:$("#lbSav").value.trim()||"Total savings"};
       save();render();toast("Names saved");break;
-    case "saveSettings":S.settings.symbol=$("#setSym").value.trim()||"$";save();render();toast("Saved");break;
+    case "saveSettings":{
+      S.settings.symbol=$("#setSym").value.trim()||"$";
+      const f=num($("#setFloor").value);S.settings.floor=isFinite(f)&&f>0?+f.toFixed(2):0;
+      save();render();toast("Saved");break;}
     case "copyPrev":{
       const p=S.budgets[String(view.cycle-1)];
       if(!p){toast("No plan on the previous cycle");break;}
