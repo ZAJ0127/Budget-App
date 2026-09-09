@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1F5E52">
+<meta name="theme-color" content="#1F4E9E" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111721" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Cycle</title>
@@ -14,10 +15,20 @@
 <meta name="apple-mobile-web-app-title" content="Cycle">
 <style>
 :root{
-  --bg:#E9EDEB; --surface:#FFF; --ink:#16201D; --muted:#5E6B66; --faint:#8A9691;
-  --line:#D5DDDA; --accent:#1F5E52; --good:#2E7D5B; --soft:#DCE9E5; --income:#3B6EA5; --over:#9E3B2E;
-  --save:#6B4E9E; --r:14px;
+  --bg:#E8ECF2; --surface:#FFFFFF; --ink:#141B26; --muted:#56637A; --faint:#6B778C;
+  --line:#D3DAE6; --accent:#1F4E9E; --soft:#DCE6F5; --income:#1F7A8C; --over:#A83A2E;
+  --save:#6B4E9E; --good:#2E7D5B; --amber:#B57A15;
+  --warnbg:#FBEFD6; --warnline:#E7CE9A; --warnink:#6B4E12;
+  --dangerbg:#F7DED8; --dangerline:#DFB0A6; --dangerink:#7A2A1E;
+  --r:14px;
 }
+@media (prefers-color-scheme:dark){:root{
+  --bg:#111721; --surface:#1A2230; --ink:#E7ECF4; --muted:#A3AFC2; --faint:#8592A6;
+  --line:#2A3446; --accent:#7AA6F0; --soft:#22324F; --income:#63C4D4; --over:#E8837A;
+  --save:#B9A5EA; --good:#6FCB9C; --amber:#E0B25C;
+  --warnbg:#3A3122; --warnline:#6B5A2E; --warnink:#F0D9A0;
+  --dangerbg:#3D2320; --dangerline:#6E3A33; --dangerink:#F3B8AE;
+}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
 html,body{margin:0;padding:0}
@@ -54,7 +65,7 @@ input,select{font:inherit;color:inherit}
 .bar.over .fill{background:var(--over)}
 .bar .pace{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--ink)}
 .bar .pace::after{content:"";position:absolute;left:-3px;top:-4px;width:8px;height:8px;background:var(--ink);border-radius:50%}
-.legend{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted)}
+.legend{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
 .stats{display:flex;margin-top:15px;border-top:1px solid var(--line);padding-top:13px}
 .stat{flex:1;border-left:1px solid var(--line);padding-left:12px}
 .stat:first-child{border-left:none;padding-left:0}
@@ -66,7 +77,7 @@ input,select{font:inherit;color:inherit}
 .row:first-child{border-top:none}
 .row .main{flex:1;min-width:0}
 .row .main b{display:block;font-weight:560;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.row .main span{font-size:12.5px;color:var(--muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .main span{font-size:13px;color:var(--muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row .amt{font-weight:620;font-size:15px;flex:none;text-align:right}
 .row .amt small{display:block;font-weight:400;font-size:11.5px;color:var(--muted)}
 .row .amt.in{color:var(--income)} .row .amt.sv{color:var(--save)} .row .amt.over{color:var(--over)}
@@ -91,16 +102,28 @@ select.inp{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.
 .datewrap .inp{flex:1}
 .datewrap .datefield{flex:none;width:50px;position:relative}
 .datewrap button{flex:none;width:50px;border:1px solid var(--line);border-radius:10px;background:var(--surface);display:grid;place-items:center;font-size:18px}
-.hint{font-size:12px;color:var(--faint);margin-top:5px}
+.hint{font-size:13px;color:var(--faint);margin-top:5px}
 .hint.warn{color:var(--over)}
 .chips{display:flex;gap:7px;margin-top:8px;flex-wrap:wrap}
-.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;color:var(--muted)}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:9px 14px;font-size:14px;color:var(--muted);min-height:40px;display:inline-flex;align-items:center;gap:6px}
 .chip.on{border-color:var(--accent);color:var(--accent);background:var(--soft)}
 .btn{display:block;width:100%;background:var(--accent);color:#fff;border-radius:12px;padding:15px;font-weight:620;font-size:16px;margin-top:18px}
-.btn:active{background:#17493F}
+.btn:active{filter:brightness(.9)}
 .btn.ghost{background:none;color:var(--accent);border:1px solid var(--line)}
 .btn.danger{background:none;color:var(--over);border:1px solid var(--line)}
 .btn.sm{padding:11px;font-size:14.5px;margin-top:10px}
+.two{display:flex;gap:10px}
+.two .f{flex:1;min-width:0;margin-top:14px}
+.savebar{position:fixed;left:0;right:0;bottom:calc(60px + env(safe-area-inset-bottom));z-index:25;padding:8px 14px 10px;
+  background:linear-gradient(to top,var(--bg) 70%,transparent);display:none}
+.savebar.on{display:block}
+.savebar .inner{max-width:560px;margin:0 auto;display:flex;gap:10px}
+.savebar .btn{margin:0;flex:1}
+.heart{flex:none;width:54px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:22px;color:var(--faint);display:grid;place-items:center}
+.heart.on{color:var(--over);border-color:var(--over)}
+.favrow .x{flex:none;width:40px;height:40px;display:grid;place-items:center;color:var(--faint);font-size:18px}
+.fold{padding:10px 15px;font-size:12.5px;color:var(--muted);font-weight:600;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left}
+.fold .chev{color:var(--faint);font-weight:400}
 .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
 .seg button{flex:1;padding:10px 4px;font-size:14px;color:var(--muted)}
 .seg button.on{background:var(--accent);color:#fff;font-weight:600}
@@ -118,9 +141,10 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 .sheet h3{font-size:18px;margin-bottom:2px}
 .sheethead{position:relative;padding-right:36px;margin-bottom:2px}
 .close{position:absolute;right:-2px;top:-4px;font-size:24px;color:var(--muted);width:34px;height:34px}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;z-index:60;background:var(--ink);color:#fff;padding:11px 18px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
-.toast.on{opacity:1}
-.banner{background:#FBEFD6;border:1px solid #E7CE9A;color:#6B4E12;font-size:13px;padding:11px 13px;border-radius:10px;margin-top:12px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;display:flex;gap:14px;align-items:center;z-index:60;background:var(--ink);color:#fff;padding:11px 18px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1;pointer-events:auto}
+.toast button{color:#9FC4FF;font-weight:650}
+.banner{background:var(--warnbg);border:1px solid var(--warnline);color:var(--warnink);font-size:13px;padding:11px 13px;border-radius:10px;margin-top:12px}
 .planline{display:flex;align-items:center;gap:10px;padding:11px 15px;border-top:1px solid var(--line)}
 .planline:first-child{border-top:none}
 .planline .pl{flex:1;min-width:0}
@@ -151,7 +175,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 .hbar .hv small{display:block;font-weight:400;font-size:11px;color:var(--muted)}
 
 /* pending + refunds */
-.check{flex:none;width:30px;height:30px;border-radius:50%;border:2px solid var(--accent);display:grid;place-items:center;color:var(--accent);font-size:15px;background:var(--surface)}
+.check{flex:none;width:44px;height:44px;border-radius:50%;border:2px solid var(--accent);display:grid;place-items:center;color:var(--accent);font-size:15px;background:var(--surface)}
 .check.done{background:var(--accent);color:#fff}
 .pendot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber,#B57A15);margin-right:5px;vertical-align:middle}
 .amt.refund{color:var(--income)}
@@ -163,6 +187,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 .combo{position:relative}
 .combo input{padding-right:40px}
 .comboArrow{position:absolute;right:2px;top:2px;bottom:2px;width:38px;display:grid;place-items:center;color:var(--muted);font-size:13px}
+.combo.up .comboList{top:auto;bottom:calc(100% + 4px)}
 .comboList{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;background:var(--surface);
   border:1px solid var(--line);border-radius:10px;max-height:246px;overflow:auto;box-shadow:0 8px 24px rgba(20,32,29,.14)}
 .comboItem{display:block;width:100%;text-align:left;padding:11px 13px;border-top:1px solid var(--line);font-size:15px}
@@ -186,31 +211,32 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
   <header class="topbar">
     <div class="cyclenav">
       <button id="prevCycle" aria-label="Previous cycle">‹</button>
-      <div class="cyclemeta" id="cycleMeta"><b id="cycleName">Cycle</b><span id="cycleDates">—</span></div>
+      <button class="cyclemeta" id="cycleMeta" style="padding:0"><b id="cycleName">Cycle</b><span id="cycleDates">—</span></button>
       <div class="pagetitle" id="pageTitle" hidden>Statistics</div>
       <button id="nextCycle" aria-label="Next cycle">›</button>
       <button class="gear" id="openSetup" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2L5.6 5.6"/></svg></button>
     </div>
-    <div style="text-align:center"><button id="jumpToday" class="today-chip" hidden>Back to now</button></div>
   </header>
   <div id="storeWarn" class="banner" hidden></div>
 
   <section class="panel on" id="p-add">
-    <div class="card">
-      <div class="seg" style="margin-bottom:4px">
+    <div class="card" style="padding-bottom:8px">
+      <div class="seg" style="margin-bottom:10px">
         <button id="mSpend" class="on">Spending</button>
         <button id="mIncome">Income</button>
         <button id="mSave">Savings</button>
       </div>
+      <button class="btn sm ghost" id="openFavs" style="margin-top:0">♥ Favourites</button>
       <label class="f"><span id="lblAmount">Price</span>
         <div class="money-in"><i>$</i><input class="num" id="fAmount" type="text" inputmode="decimal" placeholder="0.00"></div>
       </label>
       <label class="f"><span id="lblName">Item name</span>
         <input class="inp" id="fName" type="text" autocomplete="off" placeholder="e.g. Bounty Hunter Funko"></label>
-      <div class="f" id="wCat"><span>Category</span><div id="fCat"></div></div>
-      <div class="f" id="wRet"><span>Retailer</span><div id="fRet"></div>
-        <div class="hint">Type a new name and it joins the list.</div></div>
-      <div class="f" id="wCard"><span>Paid with</span><div id="fCard"></div></div>
+      <div class="two" id="wCatCard">
+        <div class="f" id="wCat"><span>Category</span><div id="fCat"></div></div>
+        <div class="f" id="wCard"><span>Paid with</span><div id="fCard"></div></div>
+      </div>
+      <div class="f" id="wRet"><span>Retailer</span><div id="fRet"></div></div>
       <label class="f"><span>Date</span>
         <div class="datewrap">
           <input class="inp num" id="fDateText" type="text" placeholder="9/5/26 or 090526" autocomplete="off">
@@ -223,16 +249,21 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
           <button type="button" class="chip" data-quick="-1">Yesterday</button>
           <button type="button" class="chip" data-quick="-2">2 days ago</button>
         </div></label>
-      <div class="chips" style="margin-top:16px">
+      <div class="chips" style="margin-top:14px">
         <button type="button" class="chip" id="tPending">⏳ Hasn't cleared yet</button>
         <button type="button" class="chip" id="tRefund">↩ Money coming back</button>
         <button type="button" class="chip" id="tWithdraw">↩ Taking money out</button>
       </div>
-      <button class="btn" id="saveEntry">Add spending</button>
+      <div style="height:6px"></div>
     </div>
+    <div style="height:84px"></div>
   </section>
-
+  <div class="savebar" id="savebar"><div class="inner">
+    <button class="heart" id="favThis" aria-label="Save as a favourite" title="Save as a favourite">♡</button>
+    <button class="btn" id="saveEntry">Add spending</button>
+  </div></div>
   <section class="panel" id="p-stats"></section>
+  <section class="panel" id="p-history"></section>
   <section class="panel" id="p-pending"></section>
   <section class="panel" id="p-subs"></section>
   <section class="panel" id="p-plan"></section>
@@ -241,7 +272,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 </div>
 
 <nav>
-  <button data-tab="stats"><svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>Stats</button>
+  <button data-tab="stats"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Home</button>
   <button data-tab="plan"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>Cycle</button>
   <button data-tab="add" class="on"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add</button>
   <button data-tab="pending"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Pending<span class="badge" id="penBadge" hidden></span></button>
@@ -289,6 +320,7 @@ function load(){
     setTimeout(()=>toast("Rebuilt from your sheet"),900);
   }
   if(!S.recur){S.recur=JSON.parse(JSON.stringify(RECUR));}
+  S.favs=S.favs||[];
   if(S.settings.floor==null)S.settings.floor=0;
   if(S.settings.statsWin==null)S.settings.statsWin=0;   /* 0 = all time */
   S.carry=Object.assign({on:0,from:null},S.carry||{});
@@ -411,12 +443,15 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",
 let view={tab:"add",cycle:0,mode:"spend",date:todayIso(),filter:null};
 let toastT;
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("on"),1900);}
+function undoToast(m,undo){const t=$("#toast");t.innerHTML=`<span>${esc(m)}</span><button id="undoBtn">Undo</button>`;t.classList.add("on");
+  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("on"),5000);
+  const b=t.querySelector("#undoBtn");if(b)b.onclick=()=>{t.classList.remove("on");undo();toast("Restored");};}
 const openSheet=h=>{$("#sheetBody").innerHTML=h;$("#sheet").classList.add("on");};
 const closeSheet=()=>$("#sheet").classList.remove("on");
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet();});
 function setTab(t){view.tab=t;
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("on",p.id==="p-"+t));
-  const lit=t==="subs"?"pending":t;
+  const lit=t==="subs"?"pending":t==="history"?"stats":t;
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===lit));
   render();window.scrollTo(0,0);}
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
@@ -475,22 +510,56 @@ function render(){
   $("#prevCycle").style.visibility=cycleTabs?"":"hidden";
   $("#nextCycle").style.visibility=cycleTabs?"":"hidden";
   $("#pageTitle").hidden=cycleTabs;
-  $("#pageTitle").textContent=view.tab==="log"?"Recently added":view.tab==="stats"?"Statistics":view.tab==="pending"?"Pending":view.tab==="subs"?"Subscriptions":"Setup";
+  $("#pageTitle").textContent={stats:"Home",history:"History",pending:"Pending",subs:"Subscriptions",setup:"Setup",log:view.byAdded?"Recently added":"Log"}[view.tab]||"";
   $("#cycleName").textContent=rel===0?"This cycle":rel===-1?"Last cycle":rel===1?"Next cycle":(rel<0?Math.abs(rel)+" cycles ago":"In "+rel+" cycles");
-  $("#cycleDates").textContent=fmtShort(c.s)+" – "+fmtShort(c.e)+", "+dOf(c.e).getFullYear();
-  $("#jumpToday").hidden=rel===0||!cycleTabs;
+  $("#cycleDates").textContent=fmtShort(c.s)+" – "+fmtShort(c.e)+", "+dOf(c.e).getFullYear()+(rel!==0?"  ·  tap for now":"");
   $("#prevCycle").disabled=view.cycle<=0;
   $("#nextCycle").disabled=view.cycle>=S.cycles.length-1;
+  $("#savebar").classList.toggle("on",view.tab==="add");
   const np=pendingTx().length+pendSav().length;
   $("#penBadge").hidden=!np; $("#penBadge").textContent=np>99?"99+":np;
   $("#storeWarn").hidden=!memFallback;
   if(memFallback)$("#storeWarn").textContent="This browser won't let the app save to the device — entries will vanish when you close the tab. Open the file directly in Chrome, or install it from a hosted URL.";
-  if(view.tab==="stats")renderStats();
+  if(view.tab==="stats")renderHome();
+  if(view.tab==="history")renderHistory();
   if(view.tab==="pending")renderPending();
   if(view.tab==="subs")renderSubs();
   if(view.tab==="plan")renderPlan();
   if(view.tab==="log")renderLog();
   if(view.tab==="setup")renderSetup();
+}
+
+/* ---------- favourites ---------- */
+const favKey=r=>(r.n||"").trim().toLowerCase()+"|"+(+r.a).toFixed(2)+"|"+(r.s||"");
+const favOf=r=>S.favs.find(f=>favKey(f)===favKey(r));
+function addFav(r){
+  if(favOf(r))return false;
+  S.favs.push({id:uid("f"),n:r.n||subName(r.s),a:Math.abs(+r.a),s:r.s,r:r.r||"",k:r.k||""});
+  save();return true;
+}
+function removeFav(id){S.favs=S.favs.filter(f=>f.id!==id);save();}
+function openFavs(){
+  const list=S.favs.slice().sort((a,b)=>a.n.localeCompare(b.n));
+  openSheet(`<div class="sheethead"><h3>Favourites</h3><span class="hint" style="margin:0">Tap one to fill the form</span>
+    <button class="close" data-close>×</button></div>
+    <div class="card flush" style="margin-top:12px;max-height:60vh;overflow:auto">
+    ${list.length?list.map(f=>`<div class="row favrow" style="padding-right:6px">
+        <button class="main" style="text-align:left;padding:0" data-usefav="${f.id}">
+          <b>${esc(f.n)}</b><span>${esc(subName(f.s))}${f.r?" · "+esc(retName(f.r)):""}${f.k?" · "+esc(cardName(f.k)):""}</span></button>
+        <div class="amt num">${money(f.a)}</div>
+        <button class="x" data-delfav="${f.id}" aria-label="Remove">×</button></div>`).join("")
+      :`<div class="empty"><b>No favourites yet</b>Tap the ♡ next to Add when you enter something you buy often, or open any entry in the Log and tap ♡ there.</div>`}
+    </div>`);
+}
+function useFav(id){
+  const f=byId(S.favs,id);if(!f)return;
+  setMode("spend");
+  $("#fAmount").value=f.a.toFixed(2);$("#fName").value=f.n;
+  if(byId(S.subs,f.s))cCat.set(f.s);
+  if(f.r&&byId(S.retailers,f.r))cRet.set(f.r);
+  if(f.k&&byId(S.cards,f.k))cCard.set(f.k);
+  setDate(todayIso());closeSheet();syncSaveLabel();
+  toast("Filled in — check the date, then Add");
 }
 
 /* ---------- low-balance guard ---------- */
@@ -499,7 +568,7 @@ function lowWarning(){
   const free=freeToSpend(),f=floorOf(),pend=openBalance();
   if(free>=f)return "";
   const short=f-free;
-  return `<div class="banner" style="background:#F7DED8;border-color:#DFB0A6;color:#7A2A1E">
+  return `<div class="banner" style="background:var(--dangerbg);border-color:var(--dangerline);color:var(--dangerink)">
     <b>${free<0?"Pending charges take you past zero":"Below the cushion you set"}</b><br>
     Once ${money(pend)} of pending clears you'd be at ${money(free)}${f?", against a "+money(f)+" cushion":""}.
     That's ${money(short)} short.</div>`;
@@ -627,6 +696,7 @@ function combo(root,getItems,opt){
   const nameOf=i=>{const x=items().find(y=>y.id===i);return x?x.name:"";};
   if(id)inp.value=nameOf(id);
   function draw(){
+    try{const rc=root.getBoundingClientRect();root.classList.toggle("up",rc.bottom+250>window.innerHeight&&rc.top>260);}catch(e){}
     const q=inp.value.trim().toLowerCase();
     let arr=items();
     if(q){
@@ -872,7 +942,55 @@ function chartLine(vals,idx){
     <text x="0" y="${H-4}" font-size="9" fill="var(--faint)">${idx.length?MON[dOf(cyc(idx[0]).s).getMonth()]+" "+dOf(cyc(idx[0]).s).getFullYear():""}</text>
     <text x="${W}" y="${H-4}" font-size="9" fill="var(--faint)" text-anchor="end">now</text></svg>`;
 }
-function renderStats(){
+function renderHome(){
+  const bank=bankBal(),pend=openBalance(),pre=preorders(),svTot=savingsTotal(),free=freeToSpend();
+  const isSv=a=>a.type==="linked"||a.type==="savings";
+  const accRow=a=>`<button class="row" data-acc="${a.id}">
+      <div class="main"><b>${esc(a.name)}</b><span>${esc(accKind(a)||"")}</span></div>
+      <div class="amt num ${isSv(a)?"sv":""}" style="${a.type==="pending"&&pend?"color:var(--over)":""}">${money(accBal(a))}</div></button>`;
+  const hero=`<div class="card">
+      <h2>${esc(S.labels.free)}</h2>
+      <div class="meter-amt num ${free<0?"over":free>0?"good":""}">${money(free)}</div>
+      <div class="meter-sub num">${esc(S.labels.net)} ${money(bank+svTot)}${pend?" · "+money(pend)+" pending":" · nothing pending"}${pre?" · "+money(pre)+" on preorder":""}</div>
+    </div>`;
+
+  const ci=nowCycle(),c=cyc(ci),cSpend=sumOf(txIn(ci)),cInc=sumOf(incIn(ci)),cSav=sumOf(savIn(ci));
+  const cBud=Object.values(S.budgets[String(ci)]||{}).reduce((a,v)=>a+v,0);
+  const cTotal=cInc-cSpend-cSav,cPend=sumOf(txIn(ci).filter(t=>t.p));
+  const today=todayIso();let el=today<c.s?0:today>c.e?28:between(today,c.s)+1;
+  const pct=cBud>0?Math.min(100,cSpend/cBud*100):(cSpend>0?100:0);
+  const thisCycle=`<div class="card" style="padding:15px 16px">
+      <div class="legend"><span>This cycle · ${fmtShort(c.s)} – ${fmtShort(c.e)} · day ${el} of 28</span>
+        <button class="chip" data-tabjump="plan" style="padding:4px 12px;min-height:30px">Open</button></div>
+      <div class="bar ${cBud>0&&cSpend>cBud?"over":""}" style="margin:12px 0 6px"><div class="fill" style="width:${pct}%"></div>
+        ${el>0&&el<28?`<div class="pace" style="left:${el/28*100}%"></div>`:""}</div>
+      <div class="legend num"><span>${money(cSpend)} of ${money(cBud)} planned</span>
+        <b style="${cTotal<0?"color:var(--over)":"color:var(--good)"}">${money(cTotal)} ${cTotal<0?"short":"left"} after savings</b></div>
+      <div class="stats">
+        <div class="stat in"><b class="num">${money0(cInc)}</b><span>income</span></div>
+        <div class="stat"><b class="num">${money0(cSpend)}</b><span>spent</span></div>
+        <div class="stat sv"><b class="num">${money0(cSav)}</b><span>saved</span></div>
+        <div class="stat"><b class="num" style="${cPend?"color:var(--over)":""}">${money0(cPend)}</b><span>pending</span></div>
+      </div></div>`;
+
+  const open=!!view.accOpen;
+  const accounts=`<div class="card flush">
+      <button class="fold" data-fold="acc"><span>ACCOUNTS</span><span class="chev">${open?"Hide ▴":"Show ▾"}</span></button>
+      ${open?S.accounts.map(accRow).join("")+`
+        <div class="row" style="background:var(--soft)"><div class="main"><b>${esc(S.labels.sav)}</b></div><div class="amt num sv">${money(svTot)}</div></div>
+        <div class="row" style="background:var(--soft)"><div class="main"><b>${esc(S.labels.net)}</b><span>checking plus savings</span></div><div class="amt num">${money(bank+svTot)}</div></div>`
+      :`<button class="row" data-fold="acc"><div class="main"><b>Checking ${money(bank)} · Savings ${money(svTot)}</b>
+          <span>Pending ${money(pend)} · Preorders ${money(pre)}</span></div></button>`}
+    </div>`;
+
+  const hist=`<div class="card flush"><button class="row" data-tabjump="history">
+      <div class="main"><b>History &amp; charts</b><span>${statsIdx().length===S.cycles.length?"All time":statsIdx().length+" cycles"} · ${S.tx.length} entries</span></div>
+      <div class="amt" style="color:var(--faint);font-weight:400">›</div></button></div>`;
+
+  $("#p-stats").innerHTML=lowWarning()+hero+thisCycle+accounts+hist;
+}
+
+function renderHistory(){
   const idx=statsIdx(),n=idx.length;
   const spend=idx.map(i=>sumOf(txIn(i))),income=idx.map(i=>sumOf(incIn(i))),
         saved=idx.map(i=>sumOf(savIn(i))),
@@ -882,118 +1000,55 @@ function renderStats(){
   let run=0;const runs={};for(let i=0;i<=nowCycle();i++){run+=sumOf(savIn(i));runs[i]=run;}
   const bal=idx.map(i=>runs[i]);
   const w=view.win===undefined?(+S.settings.statsWin||0):view.win;
-
-  const picker=`<div class="chips" style="margin-top:2px">
+  const picker=`<div class="chips" style="margin-top:12px">
     ${[[6,"6 cycles"],[12,"12 cycles"],[24,"24 cycles"],[0,"All time"]].map(([v,l])=>
       `<button class="chip ${w===v?"on":""}" data-win="${v}">${l}</button>`).join("")}</div>`;
-
   const leftover=tInc-tSpend-tSav;
-  const open=openBalance();
   const kpis=`<div class="kpis">
     <div class="kpi"><b class="num">${money0(avg(spend))}</b><span>average spend a cycle</span></div>
     <div class="kpi in"><b class="num">${money0(avg(income))}</b><span>average income</span></div>
     <div class="kpi sv"><b class="num">${money0(avg(saved))}</b><span>average put away</span></div>
     <div class="kpi ${leftover<0?"neg":""}"><b class="num">${money0(leftover)}</b><span>${leftover<0?"short over":"left over across"} ${n} cycles</span></div>
   </div>`;
-
   const p=view.pick,pk=idx.indexOf(p);
   const readout=pk>=0
     ? `<div class="readout"><span>${fmtShort(cyc(p).s)} – ${fmtShort(cyc(p).e)} ${dOf(cyc(p).e).getFullYear()}</span>
        <b class="num">${money(spend[pk])} spent · ${money(income[pk])} in</b></div>`
     : `<div class="readout"><span>Tap a bar for one cycle</span><b class="num">${money(tSpend)} over ${n}</b></div>`;
-
   const chart1=`<div class="card"><h2>Spending and income by cycle</h2>
     ${readout}<div class="chartbox">${chartBars(idx,spend,income,budget)}</div>
     <div class="keys"><span><i class="swatch" style="background:var(--accent)"></i>spent</span>
       <span><i class="swatch" style="background:var(--income)"></i>income</span>
       <span><i class="swatch" style="background:var(--ink);opacity:.45;height:2px;border-radius:0"></i>planned</span></div></div>`;
-
   const chart2=`<div class="card"><h2>Savings balance</h2>
     <div class="readout"><span>Built up since ${idx.length?fmtShort(cyc(idx[0]).s)+" "+dOf(cyc(idx[0]).s).getFullYear():""}</span><b class="num">${money(run)}</b></div>
     <div class="chartbox">${chartLine(bal,idx)}</div></div>`;
-
-  /* categories */
   const tot={},subT={};
   for(const i of idx)for(const t of txIn(i)){const c=catOf(t.s);if(!c)continue;
     tot[c.id]=(tot[c.id]||0)+t.a;subT[t.s]=(subT[t.s]||0)+t.a;}
   const cl=Object.entries(tot).sort((a,b)=>b[1]-a[1]),cmax=cl.length?cl[0][1]:1;
   const cats=cl.slice(0,10).map(([cid,v])=>{
-    const open=view.openCat===cid;
-    const subs=open?subsOfCat(cid).map(s=>[s,subT[s.id]||0]).filter(x=>x[1]).sort((a,b)=>b[1]-a[1]):[];
+    const isOpen=view.openCat===cid;
+    const subs=isOpen?subsOfCat(cid).map(s=>[s,subT[s.id]||0]).filter(x=>x[1]).sort((a,b)=>b[1]-a[1]):[];
     return `<button class="hbar" data-cat="${cid}"><div class="hl"><b>${esc((byId(S.cats,cid)||{}).name)}</b>
         <div class="track"><i style="width:${(v/cmax*100).toFixed(1)}%"></i></div></div>
       <div class="hv num">${money0(v)}<small>${tSpend>0?Math.round(v/tSpend*100):0}%</small></div></button>`
       +subs.map(([s,sv])=>`<div class="row sub"><div class="main"><b>${esc(s.name)}</b></div><div class="amt num" style="font-weight:500;color:var(--muted)">${money(sv)}</div></div>`).join("");
   }).join("");
-
-  /* payment methods */
   const kt={};for(const i of idx)for(const t of txIn(i))kt[t.k]=(kt[t.k]||0)+t.a;
   const kl=Object.entries(kt).sort((a,b)=>b[1]-a[1]),kmax=kl.length?kl[0][1]:1;
   const cards=kl.map(([k,v])=>`<div class="hbar"><div class="hl"><b>${esc(cardName(k)||"—")}</b>
-      <div class="track"><i style="width:${(v/kmax*100).toFixed(1)}%"></i></div></div>
-    <div class="hv num">${money0(v)}</div></div>`).join("");
-
-  /* retailers */
+      <div class="track"><i style="width:${(v/kmax*100).toFixed(1)}%"></i></div></div><div class="hv num">${money0(v)}</div></div>`).join("");
   const rt={};for(const i of idx)for(const t of txIn(i))if(t.r)rt[t.r]=(rt[t.r]||0)+t.a;
-  const rl=Object.entries(rt).sort((a,b)=>b[1]-a[1]).slice(0,8);
-  const rmax=rl.length?rl[0][1]:1;
+  const rl=Object.entries(rt).sort((a,b)=>b[1]-a[1]).slice(0,8),rmax=rl.length?rl[0][1]:1;
   const rets=rl.map(([r,v])=>`<div class="hbar"><div class="hl"><b>${esc(retName(r))}</b>
-      <div class="track"><i style="width:${(v/rmax*100).toFixed(1)}%"></i></div></div>
-    <div class="hv num">${money0(v)}</div></div>`).join("");
-
-  /* biggest */
+      <div class="track"><i style="width:${(v/rmax*100).toFixed(1)}%"></i></div></div><div class="hv num">${money0(v)}</div></div>`).join("");
   let big=[];for(const i of idx)big=big.concat(txIn(i));
   big=big.filter(t=>t.a>0).sort((a,b)=>b.a-a.a).slice(0,6);
   const bigHtml=big.map(t=>`<button class="row" data-edit="${t.id}" data-kind="tx">
-    <div class="main"><b>${esc(t.n||subName(t.s))}</b><span>${fmtShort(t.d)} · ${esc(subName(t.s))}</span></div>
-    ${amtHtml(t.a)}</button>`).join("");
-
+    <div class="main"><b>${esc(t.n||subName(t.s))}</b><span>${fmtShort(t.d)} · ${esc(subName(t.s))}</span></div>${amtHtml(t.a)}</button>`).join("");
   const refunds=[];for(const i of idx)for(const t of txIn(i))if(t.a<0)refunds.push(t);
-  const refTot=sumOf(refunds);
-
-  /* balances — the first thing you see */
-  const bank=bankBal(),pend=openBalance(),pre=preorders(),svTot=savingsTotal(),free=freeToSpend();
-  const grand=bank+svTot;
-  const isSv=a=>a.type==="linked"||a.type==="savings";
-  const accRow=a=>`<button class="row" data-acc="${a.id}">
-      <div class="main"><b>${esc(a.name)}</b><span>${esc(accKind(a)||"")}</span></div>
-      <div class="amt num ${isSv(a)?"sv":""}"
-        style="${a.type==="pending"&&pend?"color:var(--over)":""}">${money(accBal(a))}</div></button>`;
-  const cashA=S.accounts.filter(a=>!isSv(a)),saveA=S.accounts.filter(isSv);
-  const balances=`<div class="card">
-      <h2>${esc(S.labels.net)}</h2>
-      <div class="meter-amt num ${grand<0?"over":""}">${money(grand)}</div>
-      <div class="meter-sub num">${money(bank)} in checking · ${money(svTot)} saved</div>
-    </div>
-    <div class="card flush">
-      ${cashA.map(accRow).join("")}
-      <div class="row" style="background:var(--soft)"><div class="main"><b>${esc(S.labels.free)}</b>
-        <span>checking, once pending and preorders come out</span></div>
-        <div class="amt num ${free<0?"over":""}">${money(free)}</div></div>
-      ${saveA.map(accRow).join("")}
-      <div class="row" style="background:var(--soft)"><div class="main"><b>${esc(S.labels.sav)}</b></div>
-        <div class="amt num sv">${money(svTot)}</div></div>
-    </div>`;
-
-  /* this cycle, the way your sheet heads each tab */
-  const ci=nowCycle(),cSpend=sumOf(txIn(ci)),cInc=sumOf(incIn(ci)),cSav=sumOf(savIn(ci));
-  const cBud=Object.values(S.budgets[String(ci)]||{}).reduce((a,v)=>a+v,0);
-  const cTotal=cInc-cSpend-cSav;
-  const thisCycle=`<div class="card" style="padding:15px 16px">
-      <div class="legend" style="margin-bottom:8px"><span>This cycle · ${fmtShort(cyc(ci).s)} – ${fmtShort(cyc(ci).e)}</span>
-        <button class="chip" data-tabjump="plan" style="padding:3px 10px">Open</button></div>
-      <div class="meter-amt num ${cTotal<0?"over":""}" style="font-size:34px">${money(cTotal)}</div>
-      <div class="meter-sub">left after spending and savings</div>
-      <div class="stats">
-        <div class="stat in"><b class="num">${money0(cInc)}</b><span>income</span></div>
-        <div class="stat"><b class="num">${money0(cSpend)}</b><span>spent</span></div>
-        <div class="stat sv"><b class="num">${money0(cSav)}</b><span>saved</span></div>
-        <div class="stat"><b class="num">${money0(cBud)}</b><span>planned</span></div>
-      </div></div>`;
-
-  $("#p-stats").innerHTML=lowWarning()+balances+thisCycle+
-    `<div class="card" style="padding:14px 16px 4px"><h2 style="margin:0">History</h2></div>`+
-    picker+kpis+chart1+chart2+
+  $("#p-history").innerHTML=picker+kpis+chart1+chart2+
     `<div class="card" style="padding:14px 16px 4px"><h2 style="margin:0">By category — tap to open up</h2></div>
      <div class="card flush">${cats||'<div class="empty">Nothing in this window.</div>'}</div>`+
     `<div class="card" style="padding:14px 16px 4px"><h2 style="margin:0">By payment method</h2></div>
@@ -1002,7 +1057,7 @@ function renderStats(){
      <div class="card flush">${rets||'<div class="empty">No retailers recorded.</div>'}</div>`+
     `<div class="card" style="padding:14px 16px 4px"><h2 style="margin:0">Biggest single purchases</h2></div>
      <div class="card flush">${bigHtml||'<div class="empty">Nothing yet.</div>'}</div>`+
-    (refunds.length?`<div class="card"><div class="legend"><span>${refunds.length} refunds in this window</span><b class="num" style="color:var(--income)">+${money(Math.abs(refTot))}</b></div></div>`:"");
+    (refunds.length?`<div class="card"><div class="legend"><span>${refunds.length} refunds in this window</span><b class="num" style="color:var(--income)">+${money(Math.abs(sumOf(refunds)))}</b></div></div>`:"");
 }
 
 /* ---------- pending ---------- */
@@ -1057,42 +1112,93 @@ function renderPending(){
     <div class="card"><button class="btn sm ghost" id="clearAll">Mark everything as cleared</button></div>`;
 }
 
+const FIXED_DEFAULT=new Set(["Car Payment","Loan Payment","Phone Bill","Electric Bill","Insurance","Subscriptions","Rent"]);
+const isFixed=l=>l.fixed!=null?!!l.fixed:FIXED_DEFAULT.has(l.name);
+
 function renderPlan(){
   const i=view.cycle,c=cyc(i),{rows,loose}=planFor(i);
-  const spend=txIn(i).reduce((a,t)=>a+t.a,0);
-  const income=incIn(i).reduce((a,t)=>a+t.a,0);
-  const saved=savIn(i).reduce((a,t)=>a+t.a,0);
-  const budget=rows.reduce((a,r)=>a+r.bud,0);
-  const planSpent=rows.reduce((a,r)=>a+r.spent,0);
-  const left=budget-planSpent, over=left<0;
+  const cv=view.cyView||"plan";
+  const seg=`<div class="seg" style="margin-top:12px">
+      ${[["plan","Plan"],["break","Breakdown"],["money","Money"]].map(([k,l])=>`<button class="${cv===k?"on":""}" data-cyview="${k}">${l}</button>`).join("")}</div>`;
+
+  const spend=sumOf(txIn(i)),income=sumOf(incIn(i)),saved=sumOf(savIn(i));
+  const budget=rows.reduce((a,r)=>a+r.bud,0),planSpent=rows.reduce((a,r)=>a+r.spent,0);
+  const left=budget-planSpent;
   const pct=budget>0?Math.min(100,planSpent/budget*100):(planSpent>0?100:0);
-  const today=todayIso();
-  let el= today<c.s?0: today>c.e?28: between(today,c.s)+1;
+  const today=todayIso();let el=today<c.s?0:today>c.e?28:between(today,c.s)+1;
   const daysLeft=Math.max(0,28-el);
-  const leftover=income-spend-saved;
-
-  const hero=`<div class="card">
-    <h2>${left<0?"Over plan by":left>0?"Left in the plan":"Plan fully spent"}</h2>
-    <div class="meter-amt num ${left<0?"over":left>0?"good":""}">${money(Math.abs(left))}</div>
-    <div class="meter-sub num">${money(planSpent)} of ${money(budget)} allocated</div>
-    <div class="bar ${over?"over":""}"><div class="fill" style="width:${pct}%"></div>
-      ${el>0&&el<28?`<div class="pace" style="left:${el/28*100}%"></div>`:""}</div>
-    <div class="legend"><span>Day ${el} of 28</span><span>${daysLeft} days left</span></div>
-    <div class="stats">
-      <div class="stat in"><b class="num">${money0(income)}</b><span>income</span></div>
-      <div class="stat"><b class="num">${money0(spend)}</b><span>spent</span></div>
-      <div class="stat sv"><b class="num">${money0(saved)}</b><span>saved</span></div>
-      <div class="stat"><b class="num" style="${leftover<0?'color:var(--over)':''}">${money0(leftover)}</b><span>left over</span></div>
-    </div></div>`;
-
-  const alloc=rows.reduce((a,r)=>a+r.bud,0);
-  const expIn=expectedIn(i),gotIn=sumOf(incIn(i)),toCome=Math.max(0,expIn-gotIn);
-  const fromSav=savIncoming();
-  const opening=openingBal(i);
+  const alloc=budget;
+  const expIn=expectedIn(i),gotIn=income,toCome=Math.max(0,expIn-gotIn);
+  const fromSav=savIncoming(),opening=openingBal(i);
   const spentClear=txIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const savedOut=savIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const pendOut=openBalance(),pre=preorders();
   const onHand=freeToSpend(),cover=onHand+toCome+fromSav,gap=cover-alloc;
+
+  if(cv==="plan"){
+    const hero=`<div class="card">
+      <h2>${left<0?"Over plan by":left>0?"Left in the plan":"Plan fully spent"}</h2>
+      <div class="meter-amt num ${left<0?"over":left>0?"good":""}">${money(Math.abs(left))}</div>
+      <div class="meter-sub num">${money(planSpent)} of ${money(budget)} allocated</div>
+      <div class="bar ${left<0?"over":""}"><div class="fill" style="width:${pct}%"></div>
+        ${el>0&&el<28?`<div class="pace" style="left:${el/28*100}%"></div>`:""}</div>
+      <div class="legend"><span>Day ${el} of 28 · ${daysLeft} left</span>
+        <span style="${gap<0?"color:var(--over)":"color:var(--good)"}">${gap<0?money(Math.abs(gap))+" more than you'll have":money(gap)+" spare vs money coming"}</span></div>
+    </div>`;
+    const line=r=>{
+      const w=r.bud>0?Math.min(100,r.spent/r.bud*100):(r.spent>0?100:0);
+      const cls=r.rem>0?"good":r.rem<0?"over":"";
+      const tag=r.rem>0?"left":r.rem<0?"over":"nothing left";
+      return `<button class="planline" data-line="${r.line.id}">
+        <div class="pl"><b>${esc(r.line.name)}</b><span class="num">${money(r.spent)} of ${money(r.bud)}</span>
+          <div class="catbar ${r.rem<0?"over":""}"><i style="width:${w}%"></i></div></div>
+        <div class="pr num ${cls}">${money(Math.abs(r.rem))}<small>${tag}</small></div></button>`;};
+    const F=view.folds||{};
+    const fixed=rows.filter(r=>isFixed(r.line)&&(r.bud||r.spent));
+    const flex=rows.filter(r=>!isFixed(r.line)&&(r.bud||r.spent));
+    const empty=rows.filter(r=>!r.bud&&!r.spent);
+    const fb=fixed.reduce((a,r)=>a+r.bud,0),fs=fixed.reduce((a,r)=>a+r.spent,0);
+    const list=`<div class="card flush">
+      ${fixed.length?`<button class="fold" data-fold="fixed"><span>FIXED · ${fixed.length} line${fixed.length===1?"":"s"}</span>
+          <span class="chev num" style="${fs>fb?"color:var(--over)":""}">${money(fs)} of ${money(fb)} ${F.fixed?"▴":"▾"}</span></button>
+        ${F.fixed?fixed.map(line).join(""):""}`:""}
+      ${flex.length?`<div class="fold" style="cursor:default"><span>FLEXIBLE</span><span></span></div>${flex.map(line).join("")}`:""}
+      ${empty.length?`<button class="fold" data-fold="empty"><span>${empty.length} EMPTY LINE${empty.length===1?"":"S"}</span><span class="chev">${F.empty?"Hide ▴":"Show ▾"}</span></button>
+        ${F.empty?empty.map(line).join(""):""}`:""}
+      <div class="planline" style="background:var(--soft)"><div class="pl"><b>Allocated altogether</b><span>${rows.filter(r=>r.bud>0).length} lines with a budget</span></div>
+        <div class="pr num">${money(alloc)}</div></div>
+      ${loose.length?`<button class="planline" data-loose="1"><div class="pl"><b>Not in the plan</b><span>${loose.length} entries with no matching line</span></div>
+        <div class="pr num">${money(sumOf(loose))}</div></button>`:""}
+    </div>
+    <div class="card"><div class="hint" style="margin:0">Tap a line to set its budget. Fixed lines are bills that don't change much — mark any line fixed or flexible under the gear → Plan lines.</div></div>`;
+    $("#p-plan").innerHTML=seg+hero+list;return;
+  }
+
+  if(cv==="break"){
+    const list=txIn(i),tot={};
+    for(const t of list){const c2=catOf(t.s);if(!c2)continue;
+      tot[c2.id]=tot[c2.id]||{n:0,subs:{}};tot[c2.id].n+=t.a;tot[c2.id].subs[t.s]=(tot[c2.id].subs[t.s]||0)+t.a;}
+    const gtot={};for(const cid in tot){const c2=byId(S.cats,cid);gtot[c2.g]=(gtot[c2.g]||0)+tot[cid].n;}
+    let roll="";
+    for(const g of S.groups){
+      if(!gtot[g.id])continue;
+      roll+=`<div class="daylabel" style="${roll?"":"border-top:none"}">${esc(g.name)} · <span class="num">${money(gtot[g.id])}</span></div>`;
+      const cs=catsOfGroup(g.id).filter(c2=>tot[c2.id]).sort((a,b)=>tot[b.id].n-tot[a.id].n);
+      for(const c2 of cs){
+        roll+=`<div class="row"><div class="main"><b>${esc(c2.name)}</b></div><div class="amt num">${money(tot[c2.id].n)}</div></div>`;
+        const ss=Object.entries(tot[c2.id].subs).sort((a,b)=>b[1]-a[1]);
+        if(ss.length>1)for(const[sid,v]of ss)
+          roll+=`<div class="row sub"><div class="main"><b>${esc(subName(sid))}</b></div><div class="amt num" style="font-weight:500;color:var(--muted)">${money(v)}</div></div>`;
+      }
+    }
+    const top=`<div class="card"><h2>Spent this cycle</h2><div class="meter-amt num" style="font-size:34px">${money(spend)}</div>
+      <div class="meter-sub">${list.length} entries · ${money(spend/Math.max(1,el))} a day so far</div></div>`;
+    $("#p-plan").innerHTML=seg+top+(roll?`<div class="card flush">${roll}</div>`
+      :`<div class="card flush"><div class="empty"><b>Nothing logged yet</b>Add an entry and the breakdown builds itself.</div></div>`);
+    return;
+  }
+
+  /* money */
   const covPct=cover>0?Math.min(100,alloc/cover*100):(alloc>0?100:0);
   const ln=(lab,val,note,cls)=>`<div class="row" style="padding:9px 15px">
     <div class="main"><b style="font-weight:480;font-size:14.5px">${lab}</b>${note?`<span>${note}</span>`:""}</div>
@@ -1114,68 +1220,22 @@ function renderPlan(){
       ${savedOut?ln("Put into savings",-savedOut,null,"sv"):""}
       ${pendOut?ln("Charges not cleared",-pendOut,null,"over"):""}
       ${pre?ln("Preorders",-pre):""}
-      <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>To cover the plan</b></div>
-        <div class="amt num">${money(cover)}</div></div>
+      <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>To cover the plan</b></div><div class="amt num">${money(cover)}</div></div>
     </div>
     <div class="card">
       <div class="legend" style="margin-bottom:8px"><span>You usually spend</span><b class="num">${money(avgSpend(i,6))}</b></div>
       <button class="btn sm ghost" data-expect="${i}">Expecting ${money(expIn)} in this cycle — change</button>
       <button class="btn sm ghost" data-carry="${i}">Opening balance ${money(opening)} — adjust</button>
-      ${gap<0?`<button class="btn sm ghost" data-pullsav="${Math.abs(gap).toFixed(2)}"
-        style="color:var(--save);border-color:var(--save)">Cover the ${money(Math.abs(gap))} from savings</button>`:""}
+      ${gap<0?`<button class="btn sm ghost" data-pullsav="${Math.abs(gap).toFixed(2)}" style="color:var(--save);border-color:var(--save)">Cover the ${money(Math.abs(gap))} from savings</button>`:""}
     </div>`;
-
-  const plan=`<div class="card" style="padding:14px 16px 4px">
-      <h2 style="margin:0">The plan — tap a line to set its budget</h2></div>
-    <div class="card flush">${rows.map(r=>{
-      const w=r.bud>0?Math.min(100,r.spent/r.bud*100):(r.spent>0?100:0);
-      const ov=r.rem<0;
-      const cls=r.rem>0?"good":r.rem<0?"over":"";
-      const tag=r.rem>0?"left":r.rem<0?"over":"nothing left";
-      return `<button class="planline" data-line="${r.line.id}">
-        <div class="pl"><b>${esc(r.line.name)}</b>
-          <span class="num">${money(r.spent)} of ${money(r.bud)}</span>
-          <div class="catbar ${ov?"over":""}"><i style="width:${w}%"></i></div></div>
-        <div class="pr num ${cls}">${money(Math.abs(r.rem))}<small>${tag}</small></div>
-      </button>`;}).join("")}
-      <div class="planline" style="background:var(--soft)">
-        <div class="pl"><b>Allocated altogether</b><span>${rows.filter(r=>r.bud>0).length} lines with a budget</span></div>
-        <div class="pr num">${money(alloc)}</div></div>
-      ${loose.length?`<button class="planline" data-loose="1">
-        <div class="pl"><b>Not in the plan</b><span>${loose.length} entries with no matching line</span></div>
-        <div class="pr num">${money(loose.reduce((a,t)=>a+t.a,0))}</div></button>`:""}
-    </div>`;
-
-  /* category rollup */
-  const list=txIn(i),tot={};
-  for(const t of list){const c2=catOf(t.s);if(!c2)continue;
-    tot[c2.id]=tot[c2.id]||{n:0,subs:{}};tot[c2.id].n+=t.a;
-    tot[c2.id].subs[t.s]=(tot[c2.id].subs[t.s]||0)+t.a;}
-  const gtot={};
-  for(const cid in tot){const c2=byId(S.cats,cid);gtot[c2.g]=(gtot[c2.g]||0)+tot[cid].n;}
-  let roll="";
-  for(const g of S.groups){
-    if(!gtot[g.id])continue;
-    roll+=`<div class="daylabel" style="${roll?"":"border-top:none"}">${esc(g.name)} · <span class="num">${money(gtot[g.id])}</span></div>`;
-    const cs=catsOfGroup(g.id).filter(c2=>tot[c2.id]).sort((a,b)=>tot[b.id].n-tot[a.id].n);
-    for(const c2 of cs){
-      roll+=`<div class="row"><div class="main"><b>${esc(c2.name)}</b></div><div class="amt num">${money(tot[c2.id].n)}</div></div>`;
-      const ss=Object.entries(tot[c2.id].subs).sort((a,b)=>b[1]-a[1]);
-      if(ss.length>1) for(const[sid,v]of ss)
-        roll+=`<div class="row sub"><div class="main"><b>${esc(subName(sid))}</b></div><div class="amt num" style="font-weight:500;color:var(--muted)">${money(v)}</div></div>`;
-    }
-  }
-  const rollHtml=roll?`<div class="card" style="padding:14px 16px 4px"><h2 style="margin:0">Where it went</h2></div><div class="card flush">${roll}</div>`
-    :`<div class="card flush"><div class="empty"><b>Nothing logged yet</b>Add an entry and the breakdown builds itself.</div></div>`;
-
-  const inc=incIn(i).sort((a,b)=>a.d<b.d?1:-1), sv=savIn(i).sort((a,b)=>a.d<b.d?1:-1);
+  const inc=incIn(i).sort((a,b)=>a.d<b.d?1:-1),sv=savIn(i).sort((a,b)=>a.d<b.d?1:-1);
   const money2=`<div class="card flush">
     <div class="daylabel" style="border-top:none">Money in</div>
     ${inc.length?inc.map(e=>`<button class="row" data-edit="${e.id}" data-kind="inc"><div class="main"><b>${esc(e.n)}</b><span>${fmtShort(e.d)}</span></div><div class="amt in num">${money(e.a,true)}</div></button>`).join(""):`<div class="empty" style="padding:16px">No income this cycle.</div>`}
     <div class="daylabel">Savings, in and out</div>
-    ${sv.length?sv.map(e=>`<button class="row" data-edit="${e.id}" data-kind="sav"><div class="main"><b>${esc(e.n)}</b><span>${fmtShort(e.d)}${e.a<0?" · taken out":""}</span></div><div class="amt sv num" style="${e.a<0?"color:var(--over)":""}">${money(e.a)}</div></button>`).join(""):`<div class="empty" style="padding:16px">Nothing set aside this cycle.</div>`}
+    ${sv.length?sv.map(e=>`<button class="row" data-edit="${e.id}" data-kind="sav"><div class="main"><b>${esc(e.n)}</b><span>${fmtShort(e.d)}${e.a<0?" · taken out":""}${e.p?" · not landed":""}</span></div><div class="amt sv num" style="${e.a<0?"color:var(--over)":""}">${money(e.a)}</div></button>`).join(""):`<div class="empty" style="padding:16px">Nothing set aside this cycle.</div>`}
   </div>`;
-  $("#p-plan").innerHTML=hero+adds+plan+rollHtml+money2;
+  $("#p-plan").innerHTML=seg+adds+money2;
 }
 
 function inRange(d,y){
@@ -1196,80 +1256,78 @@ function logMatches(r,kind){
   bits.push(String(Math.abs(r.a).toFixed(2)),fmtFull(r.d));
   return bits.join(" ").toLowerCase().includes(q);
 }
-function renderLog(){
-  const q=(view.q||"").trim(),R=view.range||"cycle";
+function activeFilterCount(){
+  let n=0;const R=view.range||"cycle";
+  if(R!=="cycle")n++; if(view.filter)n++; if(view.byAdded)n++;
+  return n;
+}
+function openFilters(){
+  const R=view.range||"cycle",custom=R&&R.from;
   const rangeLbl={cycle:"This cycle",c3:"Last 3 cycles",all:"All time"};
-  const custom=R&&R.from;
-  const head=`<div class="card" style="padding:12px 14px">
-      <div class="searchwrap"><input class="inp" id="logQ" value="${esc(q)}" placeholder="Search items, categories, shops, amounts" autocomplete="off">
-        ${q?`<button id="logQx" aria-label="Clear">×</button>`:""}</div>
-      <div class="chips" style="margin-top:9px">
-        ${["cycle","c3","all"].map(k=>`<button class="chip ${R===k?"on":""}" data-range="${k}">${rangeLbl[k]}</button>`).join("")}
-        <button class="chip ${custom?"on":""}" data-range="custom">Between dates</button>
-      </div>
-      ${custom?`<div class="rangewrap">
-        <label>From<input type="date" id="rFrom" value="${R.from}"></label>
-        <label>To<input type="date" id="rTo" value="${R.to}"></label></div>`:""}
-      <div class="seg" style="margin-top:9px">
-        <button class="${view.byAdded?"":"on"}" data-sort="date">In date order</button>
-        <button class="${view.byAdded?"on":""}" data-sort="added">As I added them</button>
-      </div>
-    </div>`;
-
+  const cards=S.cards;
+  openSheet(`<div class="sheethead"><h3>Filters</h3><button class="close" data-close>×</button></div>
+    <div class="f"><span>Dates</span><div class="chips">
+      ${["cycle","c3","all"].map(k=>`<button class="chip ${R===k?"on":""}" data-range="${k}">${rangeLbl[k]}</button>`).join("")}
+      <button class="chip ${custom?"on":""}" data-range="custom">Between dates</button></div>
+      ${custom?`<div class="rangewrap"><label>From<input type="date" id="rFrom" value="${R.from}"></label>
+        <label>To<input type="date" id="rTo" value="${R.to}"></label></div>`:""}</div>
+    <div class="f"><span>Paid with</span><div class="chips">
+      <button class="chip ${view.filter?"":"on"}" data-filter="">Any card</button>
+      ${cards.map(c=>`<button class="chip ${view.filter&&view.filter.id===c.id?"on":""}" data-filter="card:${c.id}">${esc(c.name)}</button>`).join("")}</div></div>
+    <div class="f"><span>Order</span><div class="seg">
+      <button class="${view.byAdded?"":"on"}" data-sort="date">By date</button>
+      <button class="${view.byAdded?"on":""}" data-sort="added">As I added them</button></div></div>
+    <button class="btn" data-close>Show entries</button>
+    ${activeFilterCount()?`<button class="btn sm ghost" id="clearFilters">Clear filters</button>`:""}`);
+}
+function renderLog(){
+  const q=(view.q||"").trim(),R=view.range||"cycle",nf=activeFilterCount();
   let items=S.tx.map(r=>[r,"tx"]);
   if(q)items=items.concat(S.inc.map(r=>[r,"inc"]),S.sav.map(r=>[r,"sav"]));
   items=items.filter(([r,k])=>inRange(r.d,r.y)&&logMatches(r,k));
   if(view.filter&&!q){const f=view.filter;
     items=items.filter(([r,k])=>k!=="tx"?false:f.type==="card"?r.k===f.id:f.type==="cat"?(catOf(r.s)||{}).id===f.id:true);}
-
-  const cards=S.cards.filter(c=>S.tx.some(t=>inRange(t.d,t.y)&&t.k===c.id));
-  const chips=q?"":`<div class="card" style="padding:12px 14px"><div class="chips" style="margin:0">
-      <button class="chip ${view.filter?"":"on"}" data-filter="">Any card</button>
-      ${cards.map(c=>`<button class="chip ${view.filter&&view.filter.id===c.id?"on":""}" data-filter="card:${c.id}">${esc(c.name)}</button>`).join("")}
-    </div></div>`;
-
+  const spendTot=items.filter(([r,k])=>k==="tx").reduce((a,[r])=>a+r.a,0);
+  const scope=R==="cycle"?"":R==="c3"?"Last 3 cycles":R==="all"?"All time":(R.from?fmtShort(R.from)+" – "+fmtShort(R.to):"");
+  const head=`<div class="card" style="padding:12px 14px">
+      <div class="two"><div class="searchwrap" style="flex:1"><input class="inp" id="logQ" value="${esc(q)}" placeholder="Search" autocomplete="off">
+          ${q?`<button id="logQx" aria-label="Clear">×</button>`:""}</div>
+        <button class="chip ${nf?"on":""}" id="openFilters" style="flex:none">Filters${nf?" · "+nf:""}</button></div>
+      <div class="legend" style="margin-top:9px"><span>${items.length} ${q?"match"+(items.length===1?"":"es"):"entr"+(items.length===1?"y":"ies")}${scope?" · "+scope:""}${view.filter?" · "+esc(cardName(view.filter.id)):""}</span><b class="num">${money(spendTot)}</b></div>
+    </div>`;
   if(!items.length){
-    $("#p-log").innerHTML=head+chips+`<div class="card flush"><div class="empty">
-      <b>${q?"No matches":"Nothing here"}</b>${q?"Try fewer words, or widen the dates.":"Entries you add show up here."}</div></div>`;
+    $("#p-log").innerHTML=head+`<div class="card flush"><div class="empty">
+      <b>${q?"No matches":"Nothing here"}</b>${q?"Try fewer words, or widen the dates in Filters.":"Entries you add show up here."}</div></div>`;
     return;
   }
-  const spendTot=items.filter(([r,k])=>k==="tx").reduce((a,[r])=>a+r.a,0);
-
+  const amt=(r,kind)=>`<div class="amt num ${kind==="inc"?"in":kind==="sav"?"sv":""} ${r.a<0&&kind==="tx"?"refund":""}">${r.a<0&&kind==="tx"?"+"+money(Math.abs(r.a)):money(r.a)}</div>`;
   if(view.byAdded){
     const withTs=items.filter(([r])=>addedAt(r)>0).sort((a,b)=>addedAt(b[0])-addedAt(a[0])).slice(0,120);
-    if(!withTs.length){
-      $("#p-log").innerHTML=head+`<div class="card flush"><div class="empty"><b>Nothing typed in yet</b>
-        Entries imported from your sheet have no added time, so they don't appear in this order.</div></div>`;
-      return;}
+    if(!withTs.length){$("#p-log").innerHTML=head+`<div class="card flush"><div class="empty"><b>Nothing typed in yet</b>
+        Entries imported from your sheet have no added time, so they don't appear in this order.</div></div>`;return;}
     let html=head+`<div class="card flush">`,day="";
     for(const [r,kind] of withTs){
       const d2=isoOf(new Date(addedAt(r)));
       if(d2!==day){day=d2;html+=`<div class="daylabel">Added ${fmtFull(day)}</div>`;}
       const label=kind==="tx"?esc(subName(r.s)):kind==="inc"?"Income":"Savings";
-      html+=`<button class="row" data-edit="${r.id}" data-kind="${kind}">
-        <div class="main"><b>${r.p?'<i class="pendot"></i>':""}${esc(r.n||"—")}</b>
-          <span>${label} · dated ${fmtShort(r.d)}</span></div>
-        <div class="amt num ${kind==="inc"?"in":kind==="sav"?"sv":""} ${r.a<0&&kind==="tx"?"refund":""}">${r.a<0&&kind==="tx"?"+"+money(Math.abs(r.a)):money(r.a)}</div></button>`;
+      html+=`<button class="row" data-edit="${r.id}" data-kind="${kind}"><div class="main"><b>${r.p?'<i class="pendot"></i>':""}${esc(r.n||"—")}</b>
+        <span>${label} · dated ${fmtShort(r.d)}</span></div>${amt(r,kind)}</button>`;
     }
-    html+=`</div><div class="card"><div class="legend"><span>${withTs.length} shown, newest typed first</span></div></div>`;
-    $("#p-log").innerHTML=html;return;
+    $("#p-log").innerHTML=html+`</div>`;return;
   }
-
   const sorted=items.slice().sort((a,b)=>a[0].d===b[0].d?(a[0].id<b[0].id?1:-1):(a[0].d<b[0].d?1:-1)).slice(0,300);
-  let html=head+chips+`<div class="card flush">`,day="";
+  let html=head+`<div class="card flush">`,day="";
   for(const [r,kind] of sorted){
     if(r.d!==day){day=r.d;
       const dt=sorted.filter(([x,k])=>x.d===day&&k==="tx").reduce((a,[x])=>a+x.a,0);
       html+=`<div class="daylabel">${fmtFull(day)}${dt?` · <span class="num">${money(dt)}</span>`:""}</div>`;}
     let sub;
-    if(kind==="tx"){const bits=[subName(r.s)];const rt=retName(r.r);if(rt)bits.push(rt);
-      const k2=cardName(r.k);if(k2)bits.push(k2);sub=(r.p?"Not cleared yet · ":"")+bits.join(" · ");}
+    if(kind==="tx"){const bits=[subName(r.s)];const rt=retName(r.r);if(rt)bits.push(rt);const k2=cardName(r.k);if(k2)bits.push(k2);
+      sub=(r.p?"Not cleared yet · ":"")+bits.join(" · ");}
     else sub=kind==="inc"?"Income":"Savings";
-    html+=`<button class="row" data-edit="${r.id}" data-kind="${kind}">
-      <div class="main"><b>${r.p?'<i class="pendot"></i>':""}${esc(r.n||"—")}</b><span>${esc(sub)}</span></div>
-      <div class="amt num ${kind==="inc"?"in":kind==="sav"?"sv":""} ${r.a<0&&kind==="tx"?"refund":""}">${r.a<0&&kind==="tx"?"+"+money(Math.abs(r.a)):money(r.a)}</div></button>`;
+    html+=`<button class="row" data-edit="${r.id}" data-kind="${kind}"><div class="main"><b>${r.p?'<i class="pendot"></i>':""}${esc(r.n||"—")}</b><span>${esc(sub)}</span></div>${amt(r,kind)}</button>`;
   }
-  html+=`</div><div class="card"><div class="legend"><span>${items.length} ${q?"matches":"entries"}${sorted.length<items.length?" (showing 300)":""}</span><b class="num">${money(spendTot)}</b></div></div>`;
+  html+=`</div>${sorted.length<items.length?`<div class="card"><div class="hint" style="margin:0">Showing the first 300 of ${items.length}.</div></div>`:""}`;
   $("#p-log").innerHTML=html;
 }
 
@@ -1285,6 +1343,7 @@ function renderSetup(){
     <button class="btn sm ghost" data-list="card">Payment methods (${S.cards.length})</button>
     <button class="btn sm ghost" data-list="line">Plan lines (${S.lines.length})</button>
     <button class="btn sm ghost" data-tabjump="subs">Subscriptions (${(S.recur||[]).filter(r=>r.on).length})</button>
+    <button class="btn sm ghost" id="setupFavs">Favourites (${(S.favs||[]).length})</button>
   </div>
   <div class="card">
     <h2>What things are called</h2>
@@ -1352,11 +1411,22 @@ function setMode(m){
   $("#tWithdraw").classList.toggle("on",!!view.wdraw);
   $("#tPending").classList.toggle("on",!!view.pend);
   $("#tRefund").classList.toggle("on",!!view.refund);
-  $("#saveEntry").textContent=m==="income"?"Add income"
-    :m==="save"?(view.wdraw?"Take out of savings":"Add to savings")
-    :view.refund?"Log the refund":"Add spending";
+  $("#openFavs").style.display=m==="spend"?"":"none";
+  $("#favThis").style.display=m==="spend"?"":"none";
+  syncSaveLabel();
 }
 $("#tPending").onclick=()=>{view.pend=!view.pend;setMode(view.mode);};
+$("#favThis").onclick=()=>{view.favThis=!view.favThis;$("#favThis").classList.toggle("on",!!view.favThis);
+  $("#favThis").textContent=view.favThis?"♥":"♡";toast(view.favThis?"Will be saved as a favourite":"Won't be saved as a favourite");};
+$("#openFavs").onclick=()=>openFavs();
+function syncSaveLabel(){
+  const m=view.mode,a=num($("#fAmount").value),has=isFinite(a)&&a>0;
+  const amt=has?" "+money(a):"";
+  $("#saveEntry").textContent=m==="income"?"Add income"+amt
+    :m==="save"?(view.wdraw?"Take out"+amt:"Put away"+amt)
+    :view.refund?"Log refund"+amt:"Add"+(amt||" spending");
+}
+$("#fAmount").addEventListener("input",syncSaveLabel);
 $("#tRefund").onclick=()=>{view.refund=!view.refund;setMode(view.mode);};
 $("#tWithdraw").onclick=()=>{view.wdraw=!view.wdraw;setMode(view.mode);};
 $("#mSpend").onclick=()=>setMode("spend");
@@ -1395,6 +1465,7 @@ $("#saveEntry").onclick=()=>{
                r:retIdFor(cRet.text),k:cCard.id||(S.cards[0]||{}).id,y};
     if(view.pend)rec.p=1;
     S.tx.push(rec);
+    if(view.favThis){addFav(rec);view.favThis=false;$("#favThis").classList.remove("on");$("#favThis").textContent="♡";}
   } else if(view.mode==="income") S.inc.push({id:uid("i"),ts:Date.now(),d:view.date,n:n||"Income",a:+a.toFixed(2),y});
   else S.sav.push({id:uid("v"),ts:Date.now(),d:view.date,n:n||(view.wdraw?"Withdrawal":"Savings"),
                    a:+((view.wdraw?-a:a).toFixed(2)),y});
@@ -1402,7 +1473,7 @@ $("#saveEntry").onclick=()=>{
   view.cycle=y;
   toast(view.mode==="spend"&&view.refund?"Refund of "+money(a)+" logged"
        :view.mode==="save"&&view.wdraw?money(a)+" taken out of savings":"Added "+money(a));
-  view.refund=false;view.wdraw=false;setMode(view.mode);render();
+  view.refund=false;view.wdraw=false;view.pend=false;setMode(view.mode);render();
 };
 
 /* ---------- edit ---------- */
@@ -1424,7 +1495,8 @@ function openEdit(id,kind){
       <button type="button" class="chip ${rec.a<0?"on":""}" id="eFlip">${rec.a<0?"↩ It's a refund":"Make it a refund"}</button>
     </div>`:""}
     <button class="btn" id="eSave">Save changes</button>
-    ${kind==="tx"?`<button class="btn sm ghost" id="eAgain">Log this again today</button>
+    ${kind==="tx"?`<button class="btn sm ghost" id="eFav">${favOf(rec)?"♥ In favourites — remove":"♡ Save as a favourite"}</button>
+    <button class="btn sm ghost" id="eAgain">Log this again today</button>
     <button class="btn sm ghost" id="eSub">Make it a monthly subscription</button>`:""}
     ${kind==="tx"&&rec.a>0?`<button class="btn sm ghost" id="eRefund">Log a refund for this</button>`:""}
     <button class="btn sm danger" id="eDel">Delete</button>`);
@@ -1462,6 +1534,9 @@ function openEdit(id,kind){
     $("#eFlip").onclick=()=>{flip=!flip;$("#eFlip").classList.toggle("on",flip);
       $("#eFlip").textContent=flip?"↩ It's a refund":"Make it a refund";rec._f=flip;};
     rec._p=pend;rec._f=flip;
+    $("#eFav").onclick=()=>{const f=favOf(rec);
+      if(f){removeFav(f.id);toast("Removed from favourites");}else{addFav(rec);toast("Saved as a favourite");}
+      $("#eFav").textContent=favOf(rec)?"♥ In favourites — remove":"♡ Save as a favourite";};
     $("#eAgain").onclick=()=>{
       const d=todayIso();
       S.tx.push({id:uid("t"),ts:Date.now(),d,n:rec.n,a:rec.a,s:eCat.id||rec.s,r:eRet.id||rec.r,k:eCard.id||rec.k,y:cycleFor(d),p:1});
@@ -1489,8 +1564,8 @@ function openEdit(id,kind){
       delete rec._f;delete rec._p;}
     save();closeSheet();render();toast("Saved");};
   $("#eDel").onclick=()=>{
-    if(!confirm("Delete this entry?"))return;
-    const i=arr.indexOf(rec);arr.splice(i,1);save();closeSheet();render();toast("Deleted");};
+    const i=arr.indexOf(rec);arr.splice(i,1);save();closeSheet();render();
+    undoToast("Deleted “"+(rec.n||"entry")+"”",()=>{arr.splice(Math.min(i,arr.length),0,rec);save();render();});};
 }
 
 /* ---------- plan line budget ---------- */
@@ -1675,16 +1750,23 @@ function openLineEdit(id){
     subsOfCat(c.id).map(s=>`<label class="row"><input type="checkbox" class="lsub" value="${s.id}" ${chosen.has(s.id)?"checked":""} style="width:20px;height:20px"><div class="main"><b style="font-weight:450">${esc(s.name)}</b></div></label>`).join("")).join("")).join("");
   openSheet(`<div class="sheethead"><h3>${l?"Edit":"New"} plan line</h3><button class="close" data-close>×</button></div>
     <label class="f"><span>Name</span><input class="inp" id="iN" value="${l?esc(l.name):""}"></label>
+    <div class="f"><span>On the plan it's</span>
+      <div class="seg"><button type="button" id="lfFixed" class="${l&&isFixed(l)?"on":""}">Fixed bill</button>
+        <button type="button" id="lfFlex" class="${l&&!isFixed(l)?"on":(l?"":"on")}">Flexible</button></div>
+      <div class="hint">Fixed lines fold into one summary row on the Cycle page.</div></div>
     ${l&&l.kind!=="subs"?`<div class="hint" style="margin-top:10px">This line covers ${l.kind==="savings"?"savings transfers":"the whole "+(byId(S.groups,l.g)||{name:"?"}).name+" group"}, so it has no sub-category list.</div>`
       :`<div style="margin-top:14px"><span class="hint">Counts spending in these sub-categories</span>
         <div class="card flush" style="margin-top:6px;max-height:44vh;overflow:auto">${picker}</div></div>`}
     <button class="btn" id="iSave">${l?"Save":"Add line"}</button>
     ${l?`<button class="btn sm danger" id="iDel">Delete line</button>`:""}`);
+  let fx=l?isFixed(l):false;
+  $("#lfFixed").onclick=()=>{fx=true;$("#lfFixed").classList.add("on");$("#lfFlex").classList.remove("on");};
+  $("#lfFlex").onclick=()=>{fx=false;$("#lfFlex").classList.add("on");$("#lfFixed").classList.remove("on");};
   $("#iSave").onclick=()=>{
     const n=$("#iN").value.trim(); if(!n){toast("Give it a name");return;}
     const picks=[...document.querySelectorAll(".lsub:checked")].map(x=>x.value);
-    if(l){l.name=n; if(l.kind==="subs")l.subs=picks;}
-    else S.lines.push({id:uid("p"),name:n,kind:"subs",subs:picks});
+    if(l){l.name=n;l.fixed=fx?1:0; if(l.kind==="subs")l.subs=picks;}
+    else S.lines.push({id:uid("p"),name:n,kind:"subs",subs:picks,fixed:fx?1:0});
     save();closeSheet();openList("line");render();toast("Saved");};
   if(l)$("#iDel").onclick=()=>{
     if(!confirm("Delete this plan line? Its budget amounts go with it."))return;
@@ -1706,33 +1788,42 @@ document.addEventListener("click",e=>{
   const rg=t.closest("[data-range]");
   if(rg){const k=rg.dataset.range;view.rangeTouched=1;
     view.range=k==="custom"?{from:addDays(todayIso(),-27),to:todayIso()}:k;
-    renderLog();return;}
-  const so=t.closest("[data-sort]");if(so){view.byAdded=so.dataset.sort==="added";renderLog();return;}
+    render();openFilters();return;}
+  const so=t.closest("[data-sort]");if(so){view.byAdded=so.dataset.sort==="added";render();openFilters();return;}
   const fl=t.closest("[data-filter]");
   if(fl){const v=fl.dataset.filter;
-    view.filter=v?{type:v.split(":")[0],id:v.split(":")[1]}:null;renderLog();return;}
+    view.filter=v?{type:v.split(":")[0],id:v.split(":")[1]}:null;render();openFilters();return;}
   const ps=t.closest("[data-pullsav]");if(ps)return openPullSav(ps.dataset.pullsav);
+  const cvw=t.closest("[data-cyview]");if(cvw){view.cyView=cvw.dataset.cyview;renderPlan();return;}
+  const uf=t.closest("[data-usefav]");if(uf){setTab("add");useFav(uf.dataset.usefav);return;}
+  const df=t.closest("[data-delfav]");if(df){removeFav(df.dataset.delfav);openFavs();toast("Removed");return;}
+  const fo=t.closest("[data-fold]");if(fo){const k=fo.dataset.fold;
+    if(k==="acc")view.accOpen=!view.accOpen;else view.folds=Object.assign({},view.folds,{[k]:!(view.folds||{})[k]});
+    render();return;}
   const kc=t.closest("[data-carry]");if(kc)return openCarry(+kc.dataset.carry);
   const xp=t.closest("[data-expect]");if(xp)return openExpected(+xp.dataset.expect);
   const rc=t.closest("[data-recur]");if(rc)return openRecur(rc.dataset.recur);
   const ac=t.closest("[data-acc]");if(ac)return openAccount(ac.dataset.acc);
   const tj=t.closest("[data-tabjump]");if(tj)return setTab(tj.dataset.tabjump);
   const wn=t.closest("[data-win]");if(wn){view.win=+wn.dataset.win;S.settings.statsWin=view.win;
-    view.pick=null;save();renderStats();return;}
+    view.pick=null;save();renderHistory();return;}
   const bar=t.closest("[data-bar]");if(bar){const i=+bar.dataset.bar;
-    view.pick=view.pick===i?null:i;renderStats();return;}
+    view.pick=view.pick===i?null:i;renderHistory();return;}
   const ct=t.closest("[data-cat]");if(ct){
-    view.openCat=view.openCat===ct.dataset.cat?null:ct.dataset.cat;renderStats();return;}
+    view.openCat=view.openCat===ct.dataset.cat?null:ct.dataset.cat;renderHistory();return;}
   const cs=t.closest("[data-clearsav]");if(cs){
     const rec=S.sav.find(x=>x.id===cs.dataset.clearsav);
     if(rec){delete rec.p;save();render();toast(money(Math.abs(rec.a))+" landed");}
     return;}
   const cl=t.closest("[data-clear]");if(cl){
     const rec=S.tx.find(x=>x.id===cl.dataset.clear);
-    if(rec){delete rec.p;save();render();toast(money(Math.abs(rec.a))+" marked cleared");}
+    if(rec){delete rec.p;save();render();undoToast(money(Math.abs(rec.a))+" cleared",()=>{rec.p=1;save();render();});}
     return;}
   switch(t.id){
     case "logQx":view.q="";renderLog();return;
+    case "openFilters":openFilters();return;
+    case "setupFavs":openFavs();return;
+    case "clearFilters":view.range="cycle";view.filter=null;view.byAdded=false;view.rangeTouched=0;closeSheet();render();return;
     case "openSetup":setTab("setup");return;
     case "clearAll":
       if(confirm("Mark all "+(pendingTx().length+pendSav().length)+" pending entries as cleared?")){
@@ -1742,7 +1833,7 @@ document.addEventListener("click",e=>{
   switch(t.id){
     case "prevCycle":if(view.cycle>0){view.cycle--;render();}break;
     case "nextCycle":if(view.cycle<S.cycles.length-1){view.cycle++;render();}break;
-    case "jumpToday":view.cycle=nowCycle();render();break;
+    case "cycleMeta":case "cycleName":case "cycleDates":if(view.cycle!==nowCycle()){view.cycle=nowCycle();render();}break;
     case "dfMDY":S.settings.dateFormat="MDY";save();setDate(view.date);render();break;
     case "dfDMY":S.settings.dateFormat="DMY";save();setDate(view.date);render();break;
     case "saveLabels":
@@ -1788,7 +1879,7 @@ document.addEventListener("input",e=>{
 document.addEventListener("change",e=>{
   if(e.target.id==="rFrom"||e.target.id==="rTo"){
     const f=$("#rFrom").value,t2=$("#rTo").value;
-    view.range={from:f||"1900-01-01",to:t2||"2999-12-31"};renderLog();return;}
+    view.range={from:f||"1900-01-01",to:t2||"2999-12-31"};view.tab==="log"&&renderLog();return;}
   if(e.target.id!=="importFile")return;
   const f=e.target.files[0];if(!f)return;const r=new FileReader();
   r.onload=()=>{try{const d=JSON.parse(r.result);
@@ -1809,7 +1900,7 @@ document.addEventListener("touchend",e=>{
 },{passive:true});
 
 load();fillSelects();
-view.cycle=nowCycle();view.win=+S.settings.statsWin||0;setMode("spend");setDate(todayIso());
+view.cycle=nowCycle();view.win=+S.settings.statsWin||0;view.cyView="plan";setMode("spend");setDate(todayIso());
 if(S.cards[0])$("#fCard").value=S.cards[0].id;
 const fired=runRecurring();
 setTab("stats");
