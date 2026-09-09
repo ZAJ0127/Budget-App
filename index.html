@@ -19,6 +19,7 @@
   --save:#6B4E9E; --r:14px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
 html,body{margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);
   font-family:system-ui,-apple-system,"Roboto","Segoe UI",sans-serif;font-size:16px;line-height:1.45;
@@ -281,6 +282,7 @@ function load(){
   }
   if(!S.recur){S.recur=JSON.parse(JSON.stringify(RECUR));}
   if(S.settings.floor==null)S.settings.floor=0;
+  if(S.settings.statsWin==null)S.settings.statsWin=0;   /* 0 = all time */
   S.carry=Object.assign({on:0,from:null},S.carry||{});
   S.labels=Object.assign({net:"Net worth",free:"Free to spend",sav:"Total savings"},S.labels||{});
   if(S.accountsV!==5){
@@ -824,7 +826,7 @@ function statsIdx(){
   const now=nowCycle();let idx=[];
   for(let i=0;i<=now;i++)idx.push(i);
   while(idx.length>1&&!txIn(idx[0]).length&&!incIn(idx[0]).length&&!savIn(idx[0]).length)idx.shift();
-  const w=view.win===undefined?12:view.win;
+  const w=view.win===undefined?(+S.settings.statsWin||0):view.win;
   return w?idx.slice(-w):idx;
 }
 function chartBars(idx,spend,income,budget){
@@ -871,7 +873,7 @@ function renderStats(){
   const tSpend=spend.reduce((a,b)=>a+b,0),tInc=income.reduce((a,b)=>a+b,0),tSav=saved.reduce((a,b)=>a+b,0);
   let run=0;const runs={};for(let i=0;i<=nowCycle();i++){run+=sumOf(savIn(i));runs[i]=run;}
   const bal=idx.map(i=>runs[i]);
-  const w=view.win===undefined?12:view.win;
+  const w=view.win===undefined?(+S.settings.statsWin||0):view.win;
 
   const picker=`<div class="chips" style="margin-top:2px">
     ${[[6,"6 cycles"],[12,"12 cycles"],[24,"24 cycles"],[0,"All time"]].map(([v,l])=>
@@ -1647,7 +1649,8 @@ document.addEventListener("click",e=>{
   const rc=t.closest("[data-recur]");if(rc)return openRecur(rc.dataset.recur);
   const ac=t.closest("[data-acc]");if(ac)return openAccount(ac.dataset.acc);
   const tj=t.closest("[data-tabjump]");if(tj)return setTab(tj.dataset.tabjump);
-  const wn=t.closest("[data-win]");if(wn){view.win=+wn.dataset.win;view.pick=null;renderStats();return;}
+  const wn=t.closest("[data-win]");if(wn){view.win=+wn.dataset.win;S.settings.statsWin=view.win;
+    view.pick=null;save();renderStats();return;}
   const bar=t.closest("[data-bar]");if(bar){const i=+bar.dataset.bar;
     view.pick=view.pick===i?null:i;renderStats();return;}
   const ct=t.closest("[data-cat]");if(ct){
@@ -1726,7 +1729,7 @@ document.addEventListener("touchend",e=>{
 },{passive:true});
 
 load();fillSelects();
-view.cycle=nowCycle();view.win=12;setMode("spend");setDate(todayIso());
+view.cycle=nowCycle();view.win=+S.settings.statsWin||0;setMode("spend");setDate(todayIso());
 if(S.cards[0])$("#fCard").value=S.cards[0].id;
 const fired=runRecurring();
 setTab("stats");
