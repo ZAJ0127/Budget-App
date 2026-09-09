@@ -15,7 +15,7 @@
 <style>
 :root{
   --bg:#E9EDEB; --surface:#FFF; --ink:#16201D; --muted:#5E6B66; --faint:#8A9691;
-  --line:#D5DDDA; --accent:#1F5E52; --soft:#DCE9E5; --income:#3B6EA5; --over:#9E3B2E;
+  --line:#D5DDDA; --accent:#1F5E52; --good:#2E7D5B; --soft:#DCE9E5; --income:#3B6EA5; --over:#9E3B2E;
   --save:#6B4E9E; --r:14px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -46,6 +46,8 @@ input,select{font:inherit;color:inherit}
 
 .meter-amt{font-size:42px;font-weight:680;line-height:1.05;margin-top:2px}
 .meter-amt.over{color:var(--over)}
+.meter-amt.good{color:var(--good)}
+.amt.good,.pr.good{color:var(--good)}
 .meter-sub{color:var(--muted);font-size:14px;margin-top:2px}
 .bar{position:relative;height:13px;background:var(--soft);border-radius:3px;margin:16px 0 8px}
 .bar .fill{position:absolute;inset:0 auto 0 0;background:var(--accent);border-radius:3px}
@@ -1064,8 +1066,8 @@ function renderPlan(){
   const leftover=income-spend-saved;
 
   const hero=`<div class="card">
-    <h2>${over?"Over plan by":"Left in the plan"}</h2>
-    <div class="meter-amt num ${over?"over":""}">${money(Math.abs(left))}</div>
+    <h2>${left<0?"Over plan by":left>0?"Left in the plan":"Plan fully spent"}</h2>
+    <div class="meter-amt num ${left<0?"over":left>0?"good":""}">${money(Math.abs(left))}</div>
     <div class="meter-sub num">${money(planSpent)} of ${money(budget)} allocated</div>
     <div class="bar ${over?"over":""}"><div class="fill" style="width:${pct}%"></div>
       ${el>0&&el<28?`<div class="pace" style="left:${el/28*100}%"></div>`:""}</div>
@@ -1091,8 +1093,8 @@ function renderPlan(){
     <div class="amt num ${cls||""}" style="font-size:14.5px">${val<0?"−":""}${money(Math.abs(val))}</div></div>`;
   const adds=`<div class="card">
       <h2>Does the plan add up?</h2>
-      <div class="meter-amt num ${gap<0?"over":""}" style="font-size:32px">${money(Math.abs(gap))}</div>
-      <div class="meter-sub">${gap<0?"more allocated than you'll have":"spare after everything's allocated"}</div>
+      <div class="meter-amt num ${gap<0?"over":gap>0?"good":""}" style="font-size:32px">${money(Math.abs(gap))}</div>
+      <div class="meter-sub">${gap<0?"more allocated than you'll have":gap>0?"spare after everything's allocated":"allocated to the penny"}</div>
       <div class="bar ${gap<0?"over":""}" style="margin:14px 0 8px"><div class="fill" style="width:${covPct}%"></div></div>
       <div class="legend"><span>${money(alloc)} allocated</span><span>${money(cover)} to cover it</span></div>
     </div>
@@ -1121,12 +1123,14 @@ function renderPlan(){
       <h2 style="margin:0">The plan — tap a line to set its budget</h2></div>
     <div class="card flush">${rows.map(r=>{
       const w=r.bud>0?Math.min(100,r.spent/r.bud*100):(r.spent>0?100:0);
-      const ov=r.bud>0&&r.spent>r.bud;
+      const ov=r.rem<0;
+      const cls=r.rem>0?"good":r.rem<0?"over":"";
+      const tag=r.rem>0?"left":r.rem<0?"over":"nothing left";
       return `<button class="planline" data-line="${r.line.id}">
         <div class="pl"><b>${esc(r.line.name)}</b>
           <span class="num">${money(r.spent)} of ${money(r.bud)}</span>
           <div class="catbar ${ov?"over":""}"><i style="width:${w}%"></i></div></div>
-        <div class="pr num ${ov?"":""}" style="${ov?'color:var(--over)':''}">${money(r.rem)}<small>${ov?"over":"left"}</small></div>
+        <div class="pr num ${cls}">${money(Math.abs(r.rem))}<small>${tag}</small></div>
       </button>`;}).join("")}
       <div class="planline" style="background:var(--soft)">
         <div class="pl"><b>Allocated altogether</b><span>${rows.filter(r=>r.bud>0).length} lines with a budget</span></div>
@@ -1459,7 +1463,7 @@ function openLine(lid){
     <label class="f"><span>Budget for this cycle</span>
       <div class="money-in sm"><i>${esc(S.settings.symbol)}</i><input class="num" id="lB" type="text" inputmode="decimal" value="${row.bud||""}" placeholder="0.00"></div></label>
     <div class="card" style="margin-top:14px"><div class="legend"><span>Spent so far</span><b class="num">${money(row.spent)}</b></div>
-      <div class="legend" style="margin-top:6px"><span>${row.rem<0?"Over by":"Remaining"}</span><b class="num" style="${row.rem<0?'color:var(--over)':''}">${money(Math.abs(row.rem))}</b></div></div>
+      <div class="legend" style="margin-top:6px"><span>${row.rem<0?"Over by":row.rem>0?"Remaining":"Nothing left"}</span><b class="num" style="${row.rem<0?'color:var(--over)':row.rem>0?'color:var(--good)':''}">${money(Math.abs(row.rem))}</b></div></div>
     <div class="hint" style="margin-top:12px">Counts: ${esc(covers)}</div>
     <button class="btn" id="lSave">Save budget</button>
     <button class="btn sm ghost" id="lAll">Use this amount for every later cycle</button>`);
