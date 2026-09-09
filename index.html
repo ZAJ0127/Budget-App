@@ -408,7 +408,8 @@ document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()
 let cCat,cRet,cCard;
 function fillSelects(){
   const keep=[cCat&&cCat.id,cRet&&cRet.id,cCard&&cCard.id];
-  cCat =combo($("#fCat"), catItems , {value:keep[0]||(S.subs[0]||{}).id, placeholder:"Type or pick a category"});
+  cCat =combo($("#fCat"), catItems , {value:keep[0]||(S.subs[0]||{}).id, placeholder:"Type or pick a category",
+    allowNew:true, newLabel:"Add a new category called", onNew:(txt,pick)=>newCategoryFlow(txt,pick)});
   cRet =combo($("#fRet"), retItems , {value:keep[1]||"", allowNew:true, placeholder:"Type or pick a retailer"});
   cCard=combo($("#fCard"),cardItems, {value:keep[2]||(S.cards[0]||{}).id, placeholder:"Type or pick"});
 }
@@ -620,7 +621,7 @@ function combo(root,getItems,opt){
     let h=arr.slice(0,60).map(x=>`<button type="button" class="comboItem" data-id="${x.id}">${esc(x.name)}${x.sub?`<i>${esc(x.sub)}</i>`:""}</button>`).join("");
     const exact=items().some(x=>x.name.toLowerCase()===q);
     if(opt.allowNew&&q&&!exact)
-      h=`<button type="button" class="comboItem new" data-new="1">Use “${esc(inp.value.trim())}” — new</button>`+h;
+      h=`<button type="button" class="comboItem new" data-new="1">${esc(opt.newLabel||"Use")} “${esc(inp.value.trim())}”${opt.onNew?"":" — new"}</button>`+h;
     list.innerHTML=h||`<div class="comboEmpty">Nothing matches</div>`;
     list.hidden=false;
   }
@@ -638,8 +639,13 @@ function combo(root,getItems,opt){
     if(!list.hidden){close();return;} inp.focus();inp.select();draw();});
   list.addEventListener("pointerdown",e=>{
     const b=e.target.closest(".comboItem"); if(!b)return; e.preventDefault();
-    if(b.dataset.new){id="";}
-    else{id=b.dataset.id;inp.value=nameOf(id);}
+    if(b.dataset.new){
+      const typed=inp.value.trim();
+      close(); inp.blur();
+      if(opt.onNew){opt.onNew(typed,newId=>{id=newId;inp.value=nameOf(newId);});return;}
+      id="";return;
+    }
+    id=b.dataset.id;inp.value=nameOf(id);
     close(); inp.blur(); if(opt.onPick)opt.onPick(id);
   });
   return {
@@ -648,6 +654,36 @@ function combo(root,getItems,opt){
     get text(){return inp.value.trim();},
     set(v){id=v;inp.value=nameOf(v);},
     focus(){inp.focus();}
+  };
+}
+function newCategoryFlow(name,done){
+  openSheet(`<div class="sheethead"><h3>New category</h3><button class="close" data-close>×</button></div>
+    <label class="f"><span>Name</span><input class="inp" id="ncN" value="${esc(name)}"></label>
+    <div class="f"><span>Sits under</span><div id="ncP"></div>
+      <div class="hint">Pick an existing one, or type a name to make a new heading.</div></div>
+    <div class="f" id="ncGw"><span>Which is part of</span><div id="ncG"></div></div>
+    <button class="btn" id="ncGo">Add it</button>`);
+  const parents=()=>S.cats.map(c=>({id:c.id,name:c.name,sub:(byId(S.groups,c.g)||{}).name}));
+  const groups=()=>S.groups.map(g=>({id:g.id,name:g.name}));
+  const pc=combo($("#ncP"),parents,{allowNew:true,newLabel:"Make a new heading called",placeholder:"Type or pick"});
+  const gc=combo($("#ncG"),groups,{value:S.groups[0].id});
+  const syncG=()=>{const known=pc.id;$("#ncGw").style.display=known?"none":"";
+    if(known){const c=byId(S.cats,known);if(c)gc.set(c.g);}};
+  $("#ncP").querySelector("input").addEventListener("blur",()=>setTimeout(syncG,220));
+  syncG();
+  $("#ncGo").onclick=()=>{
+    const n=$("#ncN").value.trim(); if(!n){toast("Give it a name");return;}
+    let pid=pc.id;
+    if(!pid){
+      const typed=pc.text;
+      if(!typed){toast("Say where it belongs");return;}
+      const nc={id:uid("c"),name:typed,g:gc.id||S.groups[0].id};
+      S.cats.push(nc);pid=nc.id;
+    }
+    const ns={id:uid("s"),name:n,c:pid};
+    S.subs.push(ns);save();closeSheet();
+    if(done)done(ns.id);
+    render();toast("Added under "+(byId(S.cats,pid)||{}).name);
   };
 }
 const catItems=()=>{const out=[];
@@ -729,7 +765,8 @@ function openRecur(id){
     </div>
     <button class="btn" id="qSave">${r?"Save":"Add subscription"}</button>
     ${r?`<button class="btn sm danger" id="qDel">Delete</button>`:""}`);
-  const qCat=combo($("#qS"),catItems,{value:r?r.s:(S.subs[0]||{}).id});
+  const qCat=combo($("#qS"),catItems,{value:r?r.s:(S.subs[0]||{}).id,allowNew:true,
+    newLabel:"Add a new category called", onNew:(txt,pick)=>newCategoryFlow(txt,pick)});
   const qRet=combo($("#qR"),retItems,{value:r?r.r:"",allowNew:true});
   const qCard=combo($("#qK"),cardItems,{value:r?r.k:(S.cards[0]||{}).id});
   let on=r?!!r.on:true;
@@ -1301,7 +1338,8 @@ function openEdit(id,kind){
   }
   let eCat,eRet,eCard;
   if(kind==="tx"){
-    eCat =combo($("#eS"),catItems ,{value:rec.s});
+    eCat =combo($("#eS"),catItems ,{value:rec.s,allowNew:true,
+      newLabel:"Add a new category called", onNew:(txt,pick)=>newCategoryFlow(txt,pick)});
     eRet =combo($("#eR"),retItems ,{value:rec.r,allowNew:true});
     eCard=combo($("#eK"),cardItems,{value:rec.k||(S.cards[0]||{}).id});
     let pend=!!rec.p, flip=rec.a<0;
