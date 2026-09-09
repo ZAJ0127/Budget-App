@@ -1514,8 +1514,9 @@ function openList(kind){
   const T={cat:"Categories",ret:"Retailers",card:"Payment methods",line:"Plan lines"}[kind];
   let body="";
   if(kind==="cat"){
-    body=S.groups.map(g=>`<div class="daylabel">${esc(g.name)}</div>`+
-      catsOfGroup(g.id).map(c=>`<button class="row" data-item="cat:${c.id}"><div class="main"><b>${esc(c.name)}</b><span>${subsOfCat(c.id).length} sub-categories</span></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`+
+    const gTot={};for(const t of S.tx){const c=catOf(t.s);if(c)gTot[c.g]=(gTot[c.g]||0)+t.a;}
+    body=S.groups.map(g=>`<div class="daylabel">${esc(g.name)} · ${catsOfGroup(g.id).length} categories${gTot[g.id]?" · "+money0(gTot[g.id])+" all time":""}</div>`+
+      catsOfGroup(g.id).map(c=>`<button class="row" data-item="cat:${c.id}"><div class="main"><b>${esc(c.name)}</b><span>in ${esc(g.name)} · ${subsOfCat(c.id).length} sub-categories · tap to move</span></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`+
         subsOfCat(c.id).map(s=>`<button class="row sub" data-item="sub:${s.id}"><div class="main"><b>${esc(s.name)}</b></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("")).join("")).join("");
   } else if(kind==="line"){
     body=S.lines.map(l=>`<button class="row" data-item="line:${l.id}"><div class="main"><b>${esc(l.name)}</b><span>${l.kind==="savings"?"Savings":l.kind==="group"?"Group: "+(byId(S.groups,l.g)||{name:"?"}).name:l.subs.length+" sub-categories"}</span></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("");
@@ -1540,22 +1541,37 @@ function openItem(kind,id){
   const arr=kind==="cat"?S.cats:kind==="sub"?S.subs:kind==="ret"?S.retailers:S.cards;
   const it=id?byId(arr,id):null,used=id?countUse(kind,id):0;
   let extra="";
-  if(kind==="cat"||kind==="sub") extra=`<div class="f"><span>Belongs to</span><div id="iP"></div></div>`;
+  if(kind==="cat") extra=`<div class="f"><span>Which group</span>
+      <div class="seg">${S.groups.map(g=>`<button type="button" data-grp="${g.id}" class="${it&&it.g===g.id?"on":(!it&&g.id===S.groups[0].id?"on":"")}">${esc(g.name)}</button>`).join("")}</div>
+      <div class="hint">Everything filed under this category counts toward that group.</div></div>`;
+  if(kind==="sub") extra=`<div class="f"><span>Belongs to</span><div id="iP"></div>
+      <div class="hint" id="iPnote"></div></div>`;
   openSheet(`<div class="sheethead"><h3>${it?"Edit":"New"} ${kind==="cat"?"category":kind==="sub"?"sub-category":kind==="ret"?"retailer":"payment method"}</h3><button class="close" data-close>×</button></div>
     <label class="f"><span>Name</span><input class="inp" id="iN" value="${it?esc(it.name):""}" autocomplete="off"></label>
     ${extra}
     ${used?`<div class="hint" style="margin-top:10px">Used by ${used} entries.</div>`:""}
     <button class="btn" id="iSave">${it?"Save":"Add"}</button>
     ${it?`<button class="btn sm danger" id="iDel">Delete</button>`:""}`);
-  let iPar=null;
-  if(kind==="cat") iPar=combo($("#iP"),()=>S.groups.map(g=>({id:g.id,name:g.name})),{value:it?it.g:S.groups[0].id});
-  if(kind==="sub") iPar=combo($("#iP"),()=>S.cats.map(c=>({id:c.id,name:c.name,sub:(byId(S.groups,c.g)||{}).name})),{value:it?it.c:S.cats[0].id});
+  let iPar=null,iGrp=it&&kind==="cat"?it.g:S.groups[0].id;
+  if(kind==="cat"){
+    document.querySelectorAll("[data-grp]").forEach(b=>b.addEventListener("click",()=>{
+      iGrp=b.dataset.grp;
+      document.querySelectorAll("[data-grp]").forEach(x=>x.classList.toggle("on",x.dataset.grp===iGrp));
+    }));
+  }
+  if(kind==="sub"){
+    const note=()=>{const c=byId(S.cats,iPar&&iPar.id);
+      $("#iPnote").textContent=c?"So it counts toward "+((byId(S.groups,c.g)||{}).name||"—")+".":"";};
+    iPar=combo($("#iP"),()=>S.cats.map(c=>({id:c.id,name:c.name,sub:(byId(S.groups,c.g)||{}).name})),
+      {value:it?it.c:S.cats[0].id,onPick:note});
+    note();
+  }
   $("#iSave").onclick=()=>{
     const n=$("#iN").value.trim(); if(!n){toast("Give it a name");return;}
-    if(it){it.name=n; if(kind==="cat"&&iPar.id)it.g=iPar.id; if(kind==="sub"&&iPar.id)it.c=iPar.id;}
+    if(it){it.name=n; if(kind==="cat")it.g=iGrp; if(kind==="sub"&&iPar.id)it.c=iPar.id;}
     else{
       const o={id:uid(kind[0]),name:n};
-      if(kind==="cat"){o.g=iPar.id||S.groups[0].id;S.cats.push(o);}
+      if(kind==="cat"){o.g=iGrp||S.groups[0].id;S.cats.push(o);}
       else if(kind==="sub"){o.c=iPar.id||S.cats[0].id;S.subs.push(o);}
       else if(kind==="ret")S.retailers.push(o); else S.cards.push(o);
     }
