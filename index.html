@@ -190,7 +190,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 .comboArrow{position:absolute;right:2px;top:2px;bottom:2px;width:38px;display:grid;place-items:center;color:var(--muted);font-size:13px}
 .combo.up .comboList{top:auto;bottom:calc(100% + 4px)}
 .comboList{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;background:var(--surface);
-  border:1px solid var(--line);border-radius:10px;max-height:246px;overflow:auto;box-shadow:0 8px 24px rgba(20,32,29,.14)}
+  border:1px solid var(--line);border-radius:10px;max-height:246px;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;box-shadow:0 8px 24px rgba(20,32,29,.14)}
 .comboItem{display:block;width:100%;text-align:left;padding:11px 13px;border-top:1px solid var(--line);font-size:15px}
 .comboItem:first-child{border-top:none}
 .comboItem i{display:block;font-style:normal;font-size:11.5px;color:var(--faint);margin-top:1px}
@@ -734,8 +734,12 @@ function combo(root,getItems,opt){
   },180));
   arrow.addEventListener("pointerdown",e=>{e.preventDefault();
     if(!list.hidden){close();return;} inp.focus();inp.select();draw();});
-  list.addEventListener("pointerdown",e=>{
-    const b=e.target.closest(".comboItem"); if(!b)return; e.preventDefault();
+  let touchStartY=0,touchMoved=false;
+  list.addEventListener("touchstart",e=>{touchStartY=e.touches[0].clientY;touchMoved=false;},{passive:true});
+  list.addEventListener("touchmove",e=>{
+    if(Math.abs(e.touches[0].clientY-touchStartY)>6)touchMoved=true;
+  },{passive:true});
+  function pick(b){
     if(b.dataset.new){
       const typed=inp.value.trim();
       close(); inp.blur();
@@ -744,6 +748,15 @@ function combo(root,getItems,opt){
     }
     id=b.dataset.id;inp.value=nameOf(id);
     close(); inp.blur(); if(opt.onPick)opt.onPick(id);
+  }
+  list.addEventListener("touchend",e=>{
+    if(touchMoved)return;
+    const b=e.target.closest(".comboItem"); if(!b)return;
+    e.preventDefault(); pick(b);
+  });
+  list.addEventListener("click",e=>{
+    const b=e.target.closest(".comboItem"); if(!b)return;
+    pick(b);
   });
   return {
     get id(){const q=inp.value.trim().toLowerCase();
