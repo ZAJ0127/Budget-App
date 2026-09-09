@@ -713,7 +713,9 @@ function combo(root,getItems,opt){
       const inn=arr.filter(x=>!x.name.toLowerCase().startsWith(q)&&x.name.toLowerCase().includes(q));
       arr=st.concat(inn);
     }
-    let h=arr.slice(0,60).map(x=>`<button type="button" class="comboItem" data-id="${x.id}">${esc(x.name)}${x.sub?`<i>${esc(x.sub)}</i>`:""}</button>`).join("");
+    const CAP=q?60:8;
+    let h=arr.slice(0,CAP).map(x=>`<button type="button" class="comboItem" data-id="${x.id}">${esc(x.name)}${x.sub?`<i>${esc(x.sub)}</i>`:""}</button>`).join("");
+    if(!q&&arr.length>CAP)h+=`<div class="comboEmpty">+${arr.length-CAP} more — type to search</div>`;
     const exact=items().some(x=>x.name.toLowerCase()===q);
     if(opt.allowNew&&q&&!exact)
       h=`<button type="button" class="comboItem new" data-new="1">${esc(opt.newLabel||"Use")} “${esc(inp.value.trim())}”${opt.onNew?"":" — new"}</button>`+h;
@@ -1642,23 +1644,50 @@ function openAccount(id){
     S.accounts=S.accounts.filter(x=>x.id!==id);save();closeSheet();render();toast("Deleted");};
 }
 
-function openList(kind){
+function openList(kind,opts){
+  opts=opts||{};
   const T={cat:"Categories",ret:"Retailers",card:"Payment methods",line:"Plan lines"}[kind];
-  let body="";
+  const searchable=kind==="cat"||kind==="ret";
+  let body="",jump="";
   if(kind==="cat"){
     const gTot={};for(const t of S.tx){const c=catOf(t.s);if(c)gTot[c.g]=(gTot[c.g]||0)+t.a;}
-    body=S.groups.map(g=>`<div class="daylabel">${esc(g.name)} · ${catsOfGroup(g.id).length} categories${gTot[g.id]?" · "+money0(gTot[g.id])+" all time":""}</div>`+
-      catsOfGroup(g.id).map(c=>`<button class="row" data-item="cat:${c.id}"><div class="main"><b>${esc(c.name)}</b><span>in ${esc(g.name)} · ${subsOfCat(c.id).length} sub-categories · tap to move</span></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`+
-        subsOfCat(c.id).map(s=>`<button class="row sub" data-item="sub:${s.id}"><div class="main"><b>${esc(s.name)}</b></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("")).join("")).join("");
+    jump=`<div class="chips" id="listJump" style="margin-top:9px">${S.groups.map(g=>`<button type="button" class="chip" data-jump="jg-${g.id}">${esc(g.name)}</button>`).join("")}</div>`;
+    body=S.groups.map(g=>`<div class="daylabel" id="jg-${g.id}">${esc(g.name)} · ${catsOfGroup(g.id).length} categories${gTot[g.id]?" · "+money0(gTot[g.id])+" all time":""}</div>`+
+      catsOfGroup(g.id).map(c=>{
+        const subNames=subsOfCat(c.id).map(x=>x.name);
+        const st=(c.name+" "+g.name+" "+subNames.join(" ")).toLowerCase();
+        return `<button class="row" data-item="cat:${c.id}" data-st="${esc(st)}"><div class="main"><b>${esc(c.name)}</b><span>in ${esc(g.name)} · ${subNames.length} sub-categories · tap to move</span></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`+
+          subsOfCat(c.id).map(s=>`<button class="row sub" data-item="sub:${s.id}" data-st="${esc((s.name+" "+c.name+" "+g.name).toLowerCase())}"><div class="main"><b>${esc(s.name)}</b></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("");
+      }).join("")).join("");
   } else if(kind==="line"){
     body=S.lines.map(l=>`<button class="row" data-item="line:${l.id}"><div class="main"><b>${esc(l.name)}</b><span>${l.kind==="savings"?"Savings":l.kind==="group"?"Group: "+(byId(S.groups,l.g)||{name:"?"}).name:l.subs.length+" sub-categories"}</span></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("");
   } else {
     const arr=kind==="ret"?S.retailers:S.cards,pfx=kind==="ret"?"ret":"card";
-    body=arr.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(x=>`<button class="row" data-item="${pfx}:${x.id}"><div class="main"><b>${esc(x.name)}</b></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("");
+    body=arr.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(x=>`<button class="row" data-item="${pfx}:${x.id}" data-st="${esc(x.name.toLowerCase())}"><div class="main"><b>${esc(x.name)}</b></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("");
   }
+  const search=searchable?`<div style="padding:11px 15px 0"><input class="inp" id="listSearch" placeholder="Search ${kind==="cat"?"categories":"retailers"}" autocomplete="off" value="${esc(opts.q||"")}"></div>`:"";
   openSheet(`<div class="sheethead"><h3>${T}</h3><button class="close" data-close>×</button></div>
-    <div class="card flush" style="margin-top:12px;max-height:52vh;overflow:auto">${body||'<div class="empty">Nothing here yet.</div>'}</div>
+    ${search}${jump}
+    <div class="card flush" id="listBody" style="margin-top:12px;max-height:50vh;overflow:auto">${body||'<div class="empty">Nothing here yet.</div>'}</div>
     <button class="btn sm ghost" data-add="${kind}">Add ${kind==="cat"?"a category":kind==="ret"?"a retailer":kind==="card"?"a payment method":"a plan line"}</button>`);
+  if(searchable){
+    const inp=$("#listSearch");
+    if(opts.q)filterListSearch(opts.q);
+    inp.addEventListener("input",()=>filterListSearch(inp.value));
+    if(opts.focus)setTimeout(()=>inp.focus(),50);
+  }
+}
+function filterListSearch(q){
+  q=q.trim().toLowerCase();
+  const rows=document.querySelectorAll("#listBody [data-item]");
+  const heads=document.querySelectorAll("#listBody .daylabel");
+  rows.forEach(r=>{r.style.display=(!q||(r.dataset.st||"").includes(q))?"":"none";});
+  heads.forEach(h=>{
+    let n=h.nextElementSibling,any=false;
+    while(n&&!n.classList.contains("daylabel")){if(n.style.display!=="none")any=true;n=n.nextElementSibling;}
+    h.style.display=(!q||any)?"":"none";
+  });
+  const jw=$("#listJump");if(jw)jw.style.display=q?"none":"";
 }
 
 function countUse(kind,id){
@@ -1804,6 +1833,8 @@ document.addEventListener("click",e=>{
     view.filter=v?{type:v.split(":")[0],id:v.split(":")[1]}:null;render();openFilters();return;}
   const ps=t.closest("[data-pullsav]");if(ps)return openPullSav(ps.dataset.pullsav);
   const cvw=t.closest("[data-cyview]");if(cvw){view.cyView=cvw.dataset.cyview;renderPlan();return;}
+  const jp=t.closest("[data-jump]");if(jp){const el=document.getElementById(jp.dataset.jump);
+    if(el&&el.scrollIntoView)el.scrollIntoView({block:"start"});return;}
   const uf=t.closest("[data-usefav]");if(uf){setTab("add");useFav(uf.dataset.usefav);return;}
   const df=t.closest("[data-delfav]");if(df){removeFav(df.dataset.delfav);openFavs();toast("Removed");return;}
   const fo=t.closest("[data-fold]");if(fo){const k=fo.dataset.fold;
