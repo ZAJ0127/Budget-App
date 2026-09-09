@@ -252,6 +252,12 @@ const LS=(()=>{try{localStorage.setItem("__t","1");localStorage.removeItem("__t"
  catch(e){memFallback=true;return{getItem:k=>k in mem?mem[k]:null,setItem:(k,v)=>{mem[k]=String(v)},removeItem:k=>{delete mem[k]}};}})();
 const DAY=86400000;
 const uid=p=>(p||"x")+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function addedAt(r){
+  if(r.ts)return r.ts;
+  const m=String(r.id).match(/^[a-z](\w{8})\w{4}$/);
+  if(m){const v=parseInt(m[1],36);if(v>1600000000000&&v<4000000000000)return v;}
+  return 0;   /* imported from the sheet */
+}
 
 let S;
 function load(){
@@ -454,12 +460,12 @@ const accKind=a=>({bank:"income, less spending and savings",pending:"charged, no
 
 function render(){
   const c=cyc(view.cycle),rel=view.cycle-nowCycle();
-  const cycleTabs=(view.tab==="plan"||view.tab==="log"||view.tab==="add");
+  const cycleTabs=(view.tab==="plan"||view.tab==="add"||(view.tab==="log"&&!view.byAdded));
   $("#cycleMeta").hidden=!cycleTabs;
   $("#prevCycle").style.visibility=cycleTabs?"":"hidden";
   $("#nextCycle").style.visibility=cycleTabs?"":"hidden";
   $("#pageTitle").hidden=cycleTabs;
-  $("#pageTitle").textContent=view.tab==="stats"?"Statistics":view.tab==="pending"?"Pending":view.tab==="subs"?"Subscriptions":"Setup";
+  $("#pageTitle").textContent=view.tab==="log"?"Recently added":view.tab==="stats"?"Statistics":view.tab==="pending"?"Pending":view.tab==="subs"?"Subscriptions":"Setup";
   $("#cycleName").textContent=rel===0?"This cycle":rel===-1?"Last cycle":rel===1?"Next cycle":(rel<0?Math.abs(rel)+" cycles ago":"In "+rel+" cycles");
   $("#cycleDates").textContent=fmtShort(c.s)+" – "+fmtShort(c.e)+", "+dOf(c.e).getFullYear();
   $("#jumpToday").hidden=rel===0||!cycleTabs;
@@ -540,7 +546,7 @@ function openPullSav(want){
     if(v>avail+0.005&&!confirm("That is more than the "+money(avail)+" you have saved. Carry on?"))return;
     const d=$("#wD").value||todayIso();
     const from=byId(S.accounts,wFrom.id);
-    S.sav.push({id:uid("v"),d,n:"From "+((from||{}).name||"savings"),a:-Math.abs(+v.toFixed(2)),y:cycleFor(d),p:1});
+    S.sav.push({id:uid("v"),ts:Date.now(),d,n:"From "+((from||{}).name||"savings"),a:-Math.abs(+v.toFixed(2)),y:cycleFor(d),p:1});
     save();closeSheet();setTab("pending");toast(money(v)+" requested — sitting in Pending");};
 }
 function openCarry(i){
@@ -711,7 +717,7 @@ function runRecurring(){
     let d=r.next,guard=0;
     while(d<=today&&guard++<60){
       const y=cycleFor(d);
-      S.tx.push({id:uid("t"),d,n:r.n,a:+(+r.a).toFixed(2),s:r.s,r:r.r,k:r.k,y,p:1,src:r.id});
+      S.tx.push({id:uid("t"),ts:Date.now(),d,n:r.n,a:+(+r.a).toFixed(2),s:r.s,r:r.r,k:r.k,y,p:1,src:r.id});
       made++;total+=+r.a;d=advance(r,d);
     }
     r.next=d;
@@ -1134,7 +1140,38 @@ function renderPlan(){
 }
 
 function renderLog(){
-  const i=view.cycle;let list=txIn(i);
+  const i=view.cycle;
+  const seg=`<div class="card" style="padding:12px 14px"><div class="seg">
+      <button class="${view.byAdded?"":"on"}" data-sort="date">In date order</button>
+      <button class="${view.byAdded?"on":""}" data-sort="added">As I added them</button>
+    </div></div>`;
+
+  if(view.byAdded){
+    const all=S.tx.map(r=>[r,"tx"]).concat(S.inc.map(r=>[r,"inc"]),S.sav.map(r=>[r,"sav"]))
+      .filter(([r])=>addedAt(r)>0)
+      .sort((a,b)=>addedAt(b[0])-addedAt(a[0])).slice(0,60);
+    if(!all.length){
+      $("#p-log").innerHTML=seg+`<div class="card flush"><div class="empty"><b>Nothing added yet</b>
+        Entries you type into the app show up here, newest first. The ones imported from your sheet don't have an added time.</div></div>`;
+      return;}
+    let html=seg+`<div class="card flush">`,day="";
+    for(const [r,kind] of all){
+      const when=new Date(addedAt(r)),d2=isoOf(when);
+      if(d2!==day){day=d2;
+        html+=`<div class="daylabel">Added ${fmtFull(day)}</div>`;}
+      const cyLbl=r.y===nowCycle()?"":" · "+fmtShort(cyc(r.y).s)+" cycle";
+      const label=kind==="tx"?esc(subName(r.s)):kind==="inc"?"Income":"Savings";
+      html+=`<button class="row" data-edit="${r.id}" data-kind="${kind}">
+        <div class="main"><b>${r.p?'<i class="pendot"></i>':""}${esc(r.n||"—")}</b>
+          <span>${label} · dated ${fmtShort(r.d)}${cyLbl}</span></div>
+        <div class="amt num ${kind==="inc"?"in":kind==="sav"?"sv":""} ${r.a<0?"refund":""}">${r.a<0&&kind==="tx"?"+"+money(Math.abs(r.a)):money(r.a)}</div></button>`;
+    }
+    html+=`</div><div class="card"><div class="hint" style="margin:0">Newest first, across every cycle. Entries imported from your sheet aren't listed here.</div></div>`;
+    $("#p-log").innerHTML=html;
+    return;
+  }
+
+  let list=txIn(i);
   if(view.filter){const f=view.filter;
     list=list.filter(t=>f.type==="cat"?(catOf(t.s)||{}).id===f.id
       :f.type==="card"?t.k===f.id:f.type==="sub"?t.s===f.id:true);}
@@ -1144,8 +1181,8 @@ function renderLog(){
       <button class="chip ${view.filter?"":"on"}" data-filter="">All</button>
       ${cards.map(c=>`<button class="chip ${view.filter&&view.filter.type==="card"&&view.filter.id===c.id?"on":""}" data-filter="card:${c.id}">${esc(c.name)}</button>`).join("")}
     </div></div>`;
-  if(!list.length){$("#p-log").innerHTML=chips+`<div class="card flush"><div class="empty"><b>Nothing here</b>Entries you add show up newest first.</div></div>`;return;}
-  let html=chips+`<div class="card flush">`,day="";
+  if(!list.length){$("#p-log").innerHTML=seg+chips+`<div class="card flush"><div class="empty"><b>Nothing here</b>Entries you add show up newest first.</div></div>`;return;}
+  let html=seg+chips+`<div class="card flush">`,day="";
   for(const t of list){
     if(t.d!==day){day=t.d;
       const dt=list.filter(x=>x.d===day).reduce((a,x)=>a+x.a,0);
@@ -1277,12 +1314,12 @@ $("#saveEntry").onclick=()=>{
   }
   if(view.mode==="spend"){
     const sid=cCat.id||(S.subs[0]||{}).id,amt=view.refund?-Math.abs(a):a;
-    const rec={id:uid("t"),d:view.date,n:n||subName(sid),a:+amt.toFixed(2),s:sid,
+    const rec={id:uid("t"),ts:Date.now(),d:view.date,n:n||subName(sid),a:+amt.toFixed(2),s:sid,
                r:retIdFor(cRet.text),k:cCard.id||(S.cards[0]||{}).id,y};
     if(view.pend)rec.p=1;
     S.tx.push(rec);
-  } else if(view.mode==="income") S.inc.push({id:uid("i"),d:view.date,n:n||"Income",a:+a.toFixed(2),y});
-  else S.sav.push({id:uid("v"),d:view.date,n:n||(view.wdraw?"Withdrawal":"Savings"),
+  } else if(view.mode==="income") S.inc.push({id:uid("i"),ts:Date.now(),d:view.date,n:n||"Income",a:+a.toFixed(2),y});
+  else S.sav.push({id:uid("v"),ts:Date.now(),d:view.date,n:n||(view.wdraw?"Withdrawal":"Savings"),
                    a:+((view.wdraw?-a:a).toFixed(2)),y});
   save();$("#fAmount").value="";$("#fName").value="";
   view.cycle=y;
@@ -1323,7 +1360,7 @@ function openEdit(id,kind){
     rec._p=pend;rec._f=flip;
     if(rec.a>0)$("#eRefund").onclick=()=>{
       const d=todayIso();
-      S.tx.push({id:uid("t"),d,n:rec.n+" (refund)",a:-Math.abs(rec.a),s:rec.s,r:rec.r,k:rec.k,y:cycleFor(d),p:1});
+      S.tx.push({id:uid("t"),ts:Date.now(),d,n:rec.n+" (refund)",a:-Math.abs(rec.a),s:rec.s,r:rec.r,k:rec.k,y:cycleFor(d),p:1});
       save();closeSheet();view.cycle=cycleFor(d);setTab("pending");toast("Refund logged as pending");};
   }
   if(kind==="sav"){
@@ -1350,7 +1387,7 @@ function openEdit(id,kind){
     rec._p=pend;rec._f=flip;
     $("#eAgain").onclick=()=>{
       const d=todayIso();
-      S.tx.push({id:uid("t"),d,n:rec.n,a:rec.a,s:eCat.id||rec.s,r:eRet.id||rec.r,k:eCard.id||rec.k,y:cycleFor(d),p:1});
+      S.tx.push({id:uid("t"),ts:Date.now(),d,n:rec.n,a:rec.a,s:eCat.id||rec.s,r:eRet.id||rec.r,k:eCard.id||rec.k,y:cycleFor(d),p:1});
       save();closeSheet();view.cycle=cycleFor(d);setTab("pending");toast("Logged again, sitting in Pending");};
     $("#eSub").onclick=()=>{
       const next=addDays(todayIso(),1);
@@ -1573,6 +1610,7 @@ document.addEventListener("click",e=>{
   const li=t.closest("[data-list]");if(li)return openList(li.dataset.list);
   const it=t.closest("[data-item]");if(it){const[k,i]=it.dataset.item.split(":");return openItem(k,i);}
   const ad=t.closest("[data-add]");if(ad){const k=ad.dataset.add;return k==="line"?openLineEdit(null):openItem(k==="cat"?"cat":k,null);}
+  const so=t.closest("[data-sort]");if(so){view.byAdded=so.dataset.sort==="added";renderLog();return;}
   const fl=t.closest("[data-filter]");
   if(fl){const v=fl.dataset.filter;
     view.filter=v?{type:v.split(":")[0],id:v.split(":")[1]}:null;renderLog();return;}
