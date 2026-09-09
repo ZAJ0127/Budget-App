@@ -733,12 +733,16 @@ function renderSubs(){
   const on=list.filter(r=>r.on);
   const c=cyc(view.cycle),due=on.filter(r=>r.next>=c.s&&r.next<=c.e);
   const freqLbl={monthly:"every month",yearly:"once a year",weekly:"every week",cycle:"every 28 days"};
-  const rows=list.map(r=>{
+  const line=r=>{
     const late=r.on&&r.next<todayIso();
-    return `<button class="row" data-recur="${r.id}" style="${r.on?"":"opacity:.5"}">
+    return `<button class="row" data-recur="${r.id}" style="${r.on?"":"opacity:.62"}">
       <div class="main"><b>${esc(r.n)}</b>
-        <span>${r.on?(late?"due now":"next "+fmtShort(r.next)+" "+dOf(r.next).getFullYear())+" · "+freqLbl[r.freq||"monthly"]:"paused"}${r.k?" · "+esc(cardName(r.k)):""}</span></div>
-      <div class="amt num">${money(r.a)}</div></button>`;}).join("");
+        <span>${r.on?(late?"due now":"next "+fmtShort(r.next)+" "+dOf(r.next).getFullYear())+" · "+freqLbl[r.freq||"monthly"]
+          :"paused — tap to start it again"}${r.k?" · "+esc(cardName(r.k)):""}</span></div>
+      <div class="amt num">${money(r.a)}</div></button>`;};
+  const off=list.filter(r=>!r.on);
+  const rows=on.map(line).join("")
+    +(off.length?`<div class="daylabel">Paused · <span class="num">${money(off.reduce((a,r)=>a+ +r.a,0))} a month not being charged</span></div>`+off.map(line).join(""):"");
   $("#p-subs").innerHTML=`
     <div class="card">
       <h2>Every month</h2>
@@ -759,6 +763,9 @@ function openRecur(id){
   const F={monthly:"Every month",cycle:"Every 28 days",weekly:"Every week",yearly:"Once a year"};
   openSheet(`<div class="sheethead"><h3>${r?esc(r.n):"New subscription"}</h3><button class="close" data-close>×</button></div>
     <label class="f"><span>Name</span><input class="inp" id="qN" value="${r?esc(r.n):""}" placeholder="e.g. Crunchyroll"></label>
+    <div class="f"><span>Status</span>
+      <div class="seg"><button type="button" id="qRun">▶ Running</button><button type="button" id="qPause">⏸ Paused</button></div>
+      <div class="hint" id="qStatusNote"></div></div>
     <label class="f"><span>Amount</span><div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
       <input class="num" id="qA" type="text" inputmode="decimal" value="${r?r.a:""}" placeholder="0.00"></div></label>
     <label class="f"><span>How often</span><select class="inp" id="qF">
@@ -767,10 +774,8 @@ function openRecur(id){
     <div class="f"><span>Category</span><div id="qS"></div></div>
     <div class="f"><span>Retailer</span><div id="qR"></div></div>
     <div class="f"><span>Paid with</span><div id="qK"></div></div>
-    <div class="chips" style="margin-top:16px">
-      <button type="button" class="chip ${!r||r.on?"on":""}" id="qOn">${!r||r.on?"Running":"Paused"}</button>
-      ${r?`<button type="button" class="chip" id="qSkip">Skip the next one</button>`:""}
-    </div>
+    ${r?`<div class="chips" style="margin-top:16px">
+      <button type="button" class="chip" id="qSkip">Skip the next one</button></div>`:""}
     <button class="btn" id="qSave">${r?"Save":"Add subscription"}</button>
     ${r?`<button class="btn sm ghost" id="qNow">Charge it now — put ${money(r.a)} in Pending</button>
     <button class="btn sm danger" id="qDel">Delete</button>`:""}`);
@@ -779,7 +784,15 @@ function openRecur(id){
   const qRet=combo($("#qR"),retItems,{value:r?r.r:"",allowNew:true});
   const qCard=combo($("#qK"),cardItems,{value:r?r.k:(S.cards[0]||{}).id});
   let on=r?!!r.on:true;
-  $("#qOn").onclick=()=>{on=!on;$("#qOn").classList.toggle("on",on);$("#qOn").textContent=on?"Running":"Paused";};
+  function syncRun(){
+    $("#qRun").classList.toggle("on",on);
+    $("#qPause").classList.toggle("on",!on);
+    $("#qStatusNote").textContent=on?"Charges itself on the date below."
+      :"Charges nothing while paused. The date below stays put until you start it again.";
+  }
+  $("#qRun").onclick=()=>{on=true;syncRun();};
+  $("#qPause").onclick=()=>{on=false;syncRun();};
+  syncRun();
   if(r)$("#qSkip").onclick=()=>{r.next=advance(r,r.next);save();closeSheet();render();
     toast("Skipped — next on "+fmtShort(r.next));};
   $("#qSave").onclick=()=>{
