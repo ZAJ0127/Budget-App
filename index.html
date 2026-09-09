@@ -44,9 +44,10 @@ input,select{font:inherit;color:inherit}
 
 .topbar{position:sticky;top:0;z-index:20;background:var(--bg);padding:8px 0 7px;border-bottom:1px solid var(--line)}
 .cyclenav{display:flex;align-items:center;gap:4px}
-.cyclenav button{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--accent);font-size:20px;flex:none}
-.cyclenav button:disabled{color:var(--faint)}
-.cyclemeta{flex:1;text-align:center;line-height:1.2;min-width:0}
+.cyclenav>button.navbtn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--accent);font-size:22px;flex:none}
+.cyclenav>button.navbtn:disabled{color:var(--faint)}
+.cyclemeta{flex:1;text-align:center;line-height:1.2;min-width:0;padding:2px 4px;border-radius:10px}
+.cyclemeta:active{background:var(--soft)}
 .cyclemeta b{display:block;font-size:15px}
 .cyclemeta span{display:block;font-size:12.5px;color:var(--muted)}
 .today-chip{font-size:12px;color:var(--accent);border:1px solid var(--accent);padding:2px 9px;border-radius:999px;margin-top:4px;display:inline-block}
@@ -179,9 +180,9 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 .check.done{background:var(--accent);color:#fff}
 .pendot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--amber,#B57A15);margin-right:5px;vertical-align:middle}
 .amt.refund{color:var(--income)}
-.gear{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+.cyclenav>button.gear{color:var(--muted)}
 .gear svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.7;fill:none}
-.pagetitle{flex:1;font-size:16px;font-weight:650;padding-left:6px}
+.pagetitle{flex:1;font-size:17px;font-weight:650;padding-left:6px}
 .badge{position:absolute;top:6px;right:50%;transform:translateX(18px);background:var(--over);color:#fff;font-size:10px;line-height:1;padding:3px 5px;border-radius:999px;font-weight:600}
 /* combo box */
 .combo{position:relative}
@@ -210,11 +211,12 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 <div class="wrap">
   <header class="topbar">
     <div class="cyclenav">
-      <button id="prevCycle" aria-label="Previous cycle">‹</button>
+      <button id="backBtn" class="navbtn" aria-label="Back" hidden>‹</button>
+      <button id="prevCycle" class="navbtn" aria-label="Previous cycle">‹</button>
       <button class="cyclemeta" id="cycleMeta" style="padding:0"><b id="cycleName">Cycle</b><span id="cycleDates">—</span></button>
       <div class="pagetitle" id="pageTitle" hidden>Statistics</div>
-      <button id="nextCycle" aria-label="Next cycle">›</button>
-      <button class="gear" id="openSetup" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2L5.6 5.6"/></svg></button>
+      <button id="nextCycle" class="navbtn" aria-label="Next cycle">›</button>
+      <button class="gear navbtn" id="openSetup" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6M18.4 18.4l-1.6-1.6M7.2 7.2L5.6 5.6"/></svg></button>
     </div>
   </header>
   <div id="storeWarn" class="banner" hidden></div>
@@ -431,7 +433,7 @@ function planFor(i){
     if(l.kind==="savings") spent=savIn(i).reduce((a,x)=>a+x.a,0);
     else for(const t of list){ if(used.has(t.id))continue; if(lineMatches(l,t)){spent+=t.a;used.add(t.id);} }
     const bud=b[l.id]||0;
-    return {line:l,bud,spent,rem:bud-spent};
+    return {line:l,bud,spent,rem:cents(bud-spent)};
   });
   const loose=list.filter(t=>!used.has(t.id));
   return {rows:out,loose};
@@ -449,7 +451,10 @@ function undoToast(m,undo){const t=$("#toast");t.innerHTML=`<span>${esc(m)}</spa
 const openSheet=h=>{$("#sheetBody").innerHTML=h;$("#sheet").classList.add("on");};
 const closeSheet=()=>$("#sheet").classList.remove("on");
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet();});
-function setTab(t){view.tab=t;
+function setTab(t){
+  const sub=(t==="history"||t==="subs"||t==="setup");
+  if(sub&&!(view.tab==="history"||view.tab==="subs"||view.tab==="setup"))view.from=view.tab;
+  view.tab=t;
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("on",p.id==="p-"+t));
   const lit=t==="subs"?"pending":t==="history"?"stats":t;
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===lit));
@@ -476,6 +481,7 @@ function amtHtml(a,cls){
   return `<div class="amt num ${neg?"refund":""} ${cls||""}">${neg?"+"+money(Math.abs(a)):money(a)}</div>`;
 }
 const sumOf=(arr)=>arr.reduce((a,t)=>a+t.a,0);
+const cents=v=>Math.round(v*100)/100;
 
 /* accounts */
 const clearedSpend=()=>S.tx.filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
@@ -496,9 +502,9 @@ function savingsTotal(){
     .reduce((s,a)=>s+(a.type==="linked"?totalSaved()+(a.bal||0):(a.bal||0)),0);
 }
 const bankAcc=()=>S.accounts.find(a=>a.type==="bank");
-const bankBal=()=>{const a=bankAcc();return a?accBal(a):0;};
+const bankBal=()=>{const a=bankAcc();return a?cents(accBal(a)):0;};
 const preorders=()=>S.accounts.filter(a=>a.type==="manual").reduce((s,a)=>s+(a.bal||0),0);
-const freeToSpend=()=>bankBal()-openBalance()-preorders();
+const freeToSpend=()=>cents(bankBal()-openBalance()-preorders());
 const accKind=a=>({bank:"income, less spending and savings",pending:"charged, not out yet",
   linked:"every savings transfer you've logged",savings:a.upd?"set "+fmtShort(a.upd)+" "+dOf(a.upd).getFullYear():"tap to set",
   manual:a.upd?"set "+fmtShort(a.upd)+" "+dOf(a.upd).getFullYear():"tap to set"})[a.type];
@@ -506,9 +512,12 @@ const accKind=a=>({bank:"income, less spending and savings",pending:"charged, no
 function render(){
   const c=cyc(view.cycle),rel=view.cycle-nowCycle();
   const cycleTabs=(view.tab==="plan"||view.tab==="add"||(view.tab==="log"&&!view.byAdded&&(!view.range||view.range==="cycle")&&!(view.q||"").trim()));
+  const subPage=(view.tab==="history"||view.tab==="subs"||view.tab==="setup");
   $("#cycleMeta").hidden=!cycleTabs;
-  $("#prevCycle").style.visibility=cycleTabs?"":"hidden";
-  $("#nextCycle").style.visibility=cycleTabs?"":"hidden";
+  $("#prevCycle").hidden=!cycleTabs;
+  $("#nextCycle").hidden=!cycleTabs;
+  $("#backBtn").hidden=!subPage;
+  $("#openSetup").hidden=view.tab==="setup";
   $("#pageTitle").hidden=cycleTabs;
   $("#pageTitle").textContent={stats:"Home",history:"History",pending:"Pending",subs:"Subscriptions",setup:"Setup",log:view.byAdded?"Recently added":"Log"}[view.tab]||"";
   $("#cycleName").textContent=rel===0?"This cycle":rel===-1?"Last cycle":rel===1?"Next cycle":(rel<0?Math.abs(rel)+" cycles ago":"In "+rel+" cycles");
@@ -566,7 +575,7 @@ function useFav(id){
 const floorOf=()=>+S.settings.floor||0;
 function lowWarning(){
   const free=freeToSpend(),f=floorOf(),pend=openBalance();
-  if(free>=f)return "";
+  if(free>=f-0.005)return "";
   const short=f-free;
   return `<div class="banner" style="background:var(--dangerbg);border-color:var(--dangerline);color:var(--dangerink)">
     <b>${free<0?"Pending charges take you past zero":"Below the cushion you set"}</b><br>
@@ -956,7 +965,7 @@ function renderHome(){
 
   const ci=nowCycle(),c=cyc(ci),cSpend=sumOf(txIn(ci)),cInc=sumOf(incIn(ci)),cSav=sumOf(savIn(ci));
   const cBud=Object.values(S.budgets[String(ci)]||{}).reduce((a,v)=>a+v,0);
-  const cTotal=cInc-cSpend-cSav,cPend=sumOf(txIn(ci).filter(t=>t.p));
+  const cTotal=cents(cInc-cSpend-cSav),cPend=sumOf(txIn(ci).filter(t=>t.p));
   const today=todayIso();let el=today<c.s?0:today>c.e?28:between(today,c.s)+1;
   const pct=cBud>0?Math.min(100,cSpend/cBud*100):(cSpend>0?100:0);
   const thisCycle=`<div class="card" style="padding:15px 16px">
@@ -1123,17 +1132,17 @@ function renderPlan(){
 
   const spend=sumOf(txIn(i)),income=sumOf(incIn(i)),saved=sumOf(savIn(i));
   const budget=rows.reduce((a,r)=>a+r.bud,0),planSpent=rows.reduce((a,r)=>a+r.spent,0);
-  const left=budget-planSpent;
+  const left=cents(budget-planSpent);
   const pct=budget>0?Math.min(100,planSpent/budget*100):(planSpent>0?100:0);
   const today=todayIso();let el=today<c.s?0:today>c.e?28:between(today,c.s)+1;
   const daysLeft=Math.max(0,28-el);
-  const alloc=budget;
+  const alloc=cents(budget);
   const expIn=expectedIn(i),gotIn=income,toCome=Math.max(0,expIn-gotIn);
   const fromSav=savIncoming(),opening=openingBal(i);
   const spentClear=txIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const savedOut=savIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const pendOut=openBalance(),pre=preorders();
-  const onHand=freeToSpend(),cover=onHand+toCome+fromSav,gap=cover-alloc;
+  const onHand=freeToSpend(),cover=cents(onHand+toCome+fromSav),gap=cents(cover-alloc);
 
   if(cv==="plan"){
     const hero=`<div class="card">
@@ -1825,6 +1834,7 @@ document.addEventListener("click",e=>{
     case "setupFavs":openFavs();return;
     case "clearFilters":view.range="cycle";view.filter=null;view.byAdded=false;view.rangeTouched=0;closeSheet();render();return;
     case "openSetup":setTab("setup");return;
+    case "backBtn":setTab(view.from||"stats");return;
     case "clearAll":
       if(confirm("Mark all "+(pendingTx().length+pendSav().length)+" pending entries as cleared?")){
         S.tx.forEach(x=>{delete x.p;});S.sav.forEach(x=>{delete x.p;});save();render();toast("All cleared");}
