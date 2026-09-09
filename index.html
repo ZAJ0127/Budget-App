@@ -1038,14 +1038,15 @@ function renderHistory(){
   for(const i of idx)for(const t of txIn(i)){const c=catOf(t.s);if(!c)continue;
     tot[c.id]=(tot[c.id]||0)+t.a;subT[t.s]=(subT[t.s]||0)+t.a;}
   const cl=Object.entries(tot).sort((a,b)=>b[1]-a[1]),cmax=cl.length?cl[0][1]:1;
-  const cats=cl.slice(0,10).map(([cid,v])=>{
+  const catCap=view.allCats?cl.length:Math.min(10,cl.length);
+  const cats=cl.slice(0,catCap).map(([cid,v])=>{
     const isOpen=view.openCat===cid;
     const subs=isOpen?subsOfCat(cid).map(s=>[s,subT[s.id]||0]).filter(x=>x[1]).sort((a,b)=>b[1]-a[1]):[];
     return `<button class="hbar" data-cat="${cid}"><div class="hl"><b>${esc((byId(S.cats,cid)||{}).name)}</b>
         <div class="track"><i style="width:${(v/cmax*100).toFixed(1)}%"></i></div></div>
       <div class="hv num">${money0(v)}<small>${tSpend>0?Math.round(v/tSpend*100):0}%</small></div></button>`
       +subs.map(([s,sv])=>`<div class="row sub"><div class="main"><b>${esc(s.name)}</b></div><div class="amt num" style="font-weight:500;color:var(--muted)">${money(sv)}</div></div>`).join("");
-  }).join("");
+  }).join("")+(cl.length>10?`<button class="row" data-toggle="allCats" style="justify-content:center;color:var(--accent);font-weight:600">${view.allCats?"Show top 10 only":"Show all "+cl.length+" categories"}</button>`:"");
   const kt={};for(const i of idx)for(const t of txIn(i))kt[t.k]=(kt[t.k]||0)+t.a;
   const kl=Object.entries(kt).sort((a,b)=>b[1]-a[1]),kmax=kl.length?kl[0][1]:1;
   const cards=kl.map(([k,v])=>`<div class="hbar"><div class="hl"><b>${esc(cardName(k)||"—")}</b>
@@ -1835,6 +1836,7 @@ document.addEventListener("click",e=>{
   const cvw=t.closest("[data-cyview]");if(cvw){view.cyView=cvw.dataset.cyview;renderPlan();return;}
   const jp=t.closest("[data-jump]");if(jp){const el=document.getElementById(jp.dataset.jump);
     if(el&&el.scrollIntoView)el.scrollIntoView({block:"start"});return;}
+  const tg=t.closest("[data-toggle]");if(tg){view[tg.dataset.toggle]=!view[tg.dataset.toggle];renderHistory();return;}
   const uf=t.closest("[data-usefav]");if(uf){setTab("add");useFav(uf.dataset.usefav);return;}
   const df=t.closest("[data-delfav]");if(df){removeFav(df.dataset.delfav);openFavs();toast("Removed");return;}
   const fo=t.closest("[data-fold]");if(fo){const k=fo.dataset.fold;
