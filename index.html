@@ -190,7 +190,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 .comboArrow{position:absolute;right:2px;top:2px;bottom:2px;width:38px;display:grid;place-items:center;color:var(--muted);font-size:13px}
 .combo.up .comboList{top:auto;bottom:calc(100% + 4px)}
 .comboList{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;background:var(--surface);
-  border:1px solid var(--line);border-radius:10px;max-height:246px;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;box-shadow:0 8px 24px rgba(20,32,29,.14)}
+  border:1px solid var(--line);border-radius:10px;max-height:246px;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;box-shadow:0 8px 24px rgba(20,32,29,.14)}
 .comboItem{display:block;width:100%;text-align:left;padding:11px 13px;border-top:1px solid var(--line);font-size:15px}
 .comboItem:first-child{border-top:none}
 .comboItem i{display:block;font-style:normal;font-size:11.5px;color:var(--faint);margin-top:1px}
@@ -726,12 +726,26 @@ function combo(root,getItems,opt){
   inp.addEventListener("focus",draw);
   inp.addEventListener("input",draw);
   inp.addEventListener("blur",()=>setTimeout(()=>{
-    close();
+    /* don't close the list here — on iPhone, touching the list itself blurs
+       the input almost instantly, and closing now would yank the list away
+       mid-scroll. Closing is handled by outsideCloser() below instead. */
     const q=inp.value.trim().toLowerCase();
     const hit=items().find(x=>x.name.toLowerCase()===q);
     if(hit){id=hit.id;inp.value=hit.name;}
     else if(!opt.allowNew)inp.value=nameOf(id);
-  },180));
+  },220));
+  function outsideCloser(e){
+    if(!root.isConnected){
+      document.removeEventListener("touchstart",outsideCloser);
+      document.removeEventListener("mousedown",outsideCloser);
+      return;
+    }
+    if(list.hidden)return;
+    if(root.contains(e.target))return;
+    close();
+  }
+  document.addEventListener("touchstart",outsideCloser,{passive:true});
+  document.addEventListener("mousedown",outsideCloser);
   arrow.addEventListener("pointerdown",e=>{e.preventDefault();
     if(!list.hidden){close();return;} inp.focus();inp.select();draw();});
   let touchStartY=0,touchMoved=false;
