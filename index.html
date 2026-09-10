@@ -713,9 +713,9 @@ function combo(root,getItems,opt){
       const inn=arr.filter(x=>!x.name.toLowerCase().startsWith(q)&&x.name.toLowerCase().includes(q));
       arr=st.concat(inn);
     }
-    const CAP=q?60:8;
+    const CAP=Math.min(arr.length,500);
     let h=arr.slice(0,CAP).map(x=>`<button type="button" class="comboItem" data-id="${x.id}">${esc(x.name)}${x.sub?`<i>${esc(x.sub)}</i>`:""}</button>`).join("");
-    if(!q&&arr.length>CAP)h+=`<div class="comboEmpty">+${arr.length-CAP} more — type to search</div>`;
+    if(arr.length>CAP)h+=`<div class="comboEmpty">+${arr.length-CAP} more — type to search</div>`;
     const exact=items().some(x=>x.name.toLowerCase()===q);
     if(opt.allowNew&&q&&!exact)
       h=`<button type="button" class="comboItem new" data-new="1">${esc(opt.newLabel||"Use")} “${esc(inp.value.trim())}”${opt.onNew?"":" — new"}</button>`+h;
@@ -1530,6 +1530,29 @@ $("#saveEntry").onclick=()=>{
 };
 
 /* ---------- edit ---------- */
+const refundedAgainst=id=>S.tx.filter(t=>t.src===id&&t.a<0).reduce((a,t)=>a+Math.abs(t.a),0);
+function openPartialRefund(rec){
+  const already=refundedAgainst(rec.id),remaining=cents(rec.a-already);
+  openSheet(`<div class="sheethead"><h3>Refund “${esc(rec.n)}”</h3>
+    <span class="hint" style="margin:0">Originally ${money(rec.a)}${already?" · "+money(already)+" already refunded":""}</span>
+    <button class="close" data-close>×</button></div>
+    <label class="f"><span>Amount to refund</span>
+      <div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
+        <input class="num" id="pfA" type="text" inputmode="decimal" value="${remaining>0?remaining.toFixed(2):""}" placeholder="0.00"></div>
+      <div class="hint">${remaining>0?"Up to "+money(remaining)+" left refundable. Edit this for a partial refund.":"Nothing left to refund — the full amount is already covered."}</div></label>
+    <label class="f"><span>Date</span><input class="inp num" id="pfD" type="date" value="${todayIso()}"></label>
+    <button class="btn" id="pfGo">Log the refund</button>`);
+  $("#pfGo").onclick=()=>{
+    const v=num($("#pfA").value);
+    if(!isFinite(v)||v<=0){toast("Enter an amount above zero");return;}
+    if(v>remaining+0.005&&!confirm("That's more than the "+money(remaining)+" left to refund on this entry. Log it anyway?"))return;
+    const d=$("#pfD").value||todayIso();
+    S.tx.push({id:uid("t"),ts:Date.now(),d,n:rec.n+" (refund)",a:-Math.abs(+v.toFixed(2)),s:rec.s,r:rec.r,k:rec.k,y:cycleFor(d),p:1,src:rec.id});
+    save();closeSheet();view.cycle=cycleFor(d);setTab("pending");
+    const left=cents(remaining-v);
+    toast(left>0.005?money(v)+" refunded · "+money(left)+" still refundable":money(v)+" refunded — fully covered now");
+  };
+}
 function openEdit(id,kind){
   const arr=kind==="tx"?S.tx:kind==="inc"?S.inc:S.sav;
   const rec=arr.find(x=>x.id===id); if(!rec)return;
@@ -1551,7 +1574,7 @@ function openEdit(id,kind){
     ${kind==="tx"?`<button class="btn sm ghost" id="eFav">${favOf(rec)?"♥ In favourites — remove":"♡ Save as a favourite"}</button>
     <button class="btn sm ghost" id="eAgain">Log this again today</button>
     <button class="btn sm ghost" id="eSub">Make it a monthly subscription</button>`:""}
-    ${kind==="tx"&&rec.a>0?`<button class="btn sm ghost" id="eRefund">Log a refund for this</button>`:""}
+    ${kind==="tx"&&rec.a>0&&cents(rec.a-refundedAgainst(rec.id))>0.005?`<button class="btn sm ghost" id="eRefund">Refund this — up to ${money(cents(rec.a-refundedAgainst(rec.id)))}</button>`:""}
     <button class="btn sm danger" id="eDel">Delete</button>`);
   if(kind==="tx"){
     let pend=!!rec.p, flip=rec.a<0;
@@ -1560,10 +1583,6 @@ function openEdit(id,kind){
     $("#eFlip").onclick=()=>{flip=!flip;$("#eFlip").classList.toggle("on",flip);
       $("#eFlip").textContent=flip?"↩ It's a refund":"Make it a refund";rec._f=flip;};
     rec._p=pend;rec._f=flip;
-    if(rec.a>0)$("#eRefund").onclick=()=>{
-      const d=todayIso();
-      S.tx.push({id:uid("t"),ts:Date.now(),d,n:rec.n+" (refund)",a:-Math.abs(rec.a),s:rec.s,r:rec.r,k:rec.k,y:cycleFor(d),p:1});
-      save();closeSheet();view.cycle=cycleFor(d);setTab("pending");toast("Refund logged as pending");};
   }
   if(kind==="sav"){
     let sp=!!rec.p;
@@ -1600,10 +1619,7 @@ function openEdit(id,kind){
       S.recur.push({id:uid("q"),n:rec.n,a:Math.abs(rec.a),freq:"monthly",next,day:dOf(next).getDate(),
                     s:eCat.id||rec.s,r:eRet.id||rec.r,k:eCard.id||rec.k,on:1});
       save();closeSheet();setTab("subs");toast("Added as a monthly subscription — check the date");};
-    if(rec.a>0)$("#eRefund").onclick=()=>{
-      const d=todayIso();
-      S.tx.push({id:uid("t"),d,n:rec.n+" (refund)",a:-Math.abs(rec.a),s:rec.s,r:rec.r,k:rec.k,y:cycleFor(d),p:1});
-      save();closeSheet();view.cycle=cycleFor(d);setTab("pending");toast("Refund logged as pending");};
+    if(rec.a>0&&cents(rec.a-refundedAgainst(rec.id))>0.005)$("#eRefund").onclick=()=>openPartialRefund(rec);
   }
   $("#eSave").onclick=()=>{
     const a=num($("#eA").value); if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
