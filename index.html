@@ -269,6 +269,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
   <section class="panel" id="p-pending"></section>
   <section class="panel" id="p-subs"></section>
   <section class="panel" id="p-bills"></section>
+  <section class="panel" id="p-income"></section>
   <section class="panel" id="p-plan"></section>
   <section class="panel" id="p-log"></section>
   <section class="panel" id="p-setup"></section>
@@ -290,6 +291,8 @@ const SEED = {"version":3,"settings":{"symbol":"$","dateFormat":"MDY","anchor":"
 const PATCH = [];
 const RECUR = [{"id":"q0","n":"iCloud","a":2.99,"day":3,"freq":"monthly","s":"s13","r":"r6","k":"k0","on":1,"next":"2026-10-03"},{"id":"q1","n":"Crunchyroll","a":9.99,"day":13,"freq":"monthly","s":"s13","r":"r8","k":"k1","on":1,"next":"2026-09-13"},{"id":"q2","n":"Onedrive","a":10.66,"day":24,"freq":"monthly","s":"s13","r":"r16","k":"k1","on":1,"next":"2026-09-24"},{"id":"q3","n":"Patreon","a":7.06,"day":24,"freq":"monthly","s":"s13","r":"r13","k":"k1","on":1,"next":"2026-09-24"},{"id":"q4","n":"La Fitness","a":28.0,"day":13,"freq":"monthly","s":"s17","r":"r17","k":"k1","on":1,"next":"2026-09-13"},{"id":"q5","n":"Mister Car Wash","a":10.0,"day":9,"freq":"monthly","s":"s11","r":"r23","k":"k0","on":0,"next":"2026-09-09"}];
 const BILLS = [{"id":"bl0","n":"Car Payment","a":450.16,"day":10,"freq":"monthly","s":"s0","r":"r12","k":"k6","on":1,"next":"2026-10-10","kind":"bill"},{"id":"bl1","n":"Loan Payment","a":500.0,"day":9,"freq":"monthly","s":"s1","r":"r13","k":"k6","on":1,"next":"2026-10-09","kind":"bill"},{"id":"bl2","n":"Phone Bill","a":60.0,"day":8,"freq":"monthly","s":"s2","r":"r20","k":"k6","on":1,"next":"2026-10-08","kind":"bill"},{"id":"bl3","n":"Electric Bill","a":476.89,"day":16,"freq":"monthly","s":"s3","r":"r61","k":"k6","on":1,"next":"2026-09-16","kind":"bill"},{"id":"bl4","n":"Life Insurance","a":306.5,"day":16,"freq":"monthly","s":"s4","r":"r15","k":"k6","on":1,"next":"2026-09-16","kind":"bill"},{"id":"bl5","n":"Health Insurance","a":250.0,"day":8,"freq":"monthly","s":"s5","r":"r40","k":"k6","on":1,"next":"2026-10-08","kind":"bill"},{"id":"bl6","n":"Rent","a":700.0,"day":3,"freq":"monthly","s":"s8","r":"r116","k":"k6","on":1,"next":"2026-10-03","kind":"bill"}];
+const INCOMES = [{"id":"in0","n":"Raytheon","a":2942.58,"day":17,"freq":"biweekly","on":1,"next":"2026-09-17","kind":"income"}]
+;
 const KEY="cycle.v3";
 let memFallback=false; const mem={};
 const LS=(()=>{try{localStorage.setItem("__t","1");localStorage.removeItem("__t");return localStorage;}
@@ -325,6 +328,11 @@ function load(){
   }
   if(!S.recur){S.recur=JSON.parse(JSON.stringify(RECUR));}
   S.recur.forEach(r=>{if(!r.kind)r.kind="sub";});
+  if(!S.incomeSeeded){
+    S.incomeSeeded=1;
+    const have=new Set(S.recur.map(r=>r.n+"|"+(r.kind||"sub")));
+    INCOMES.forEach(x=>{if(!have.has(x.n+"|income"))S.recur.push(JSON.parse(JSON.stringify(x)));});
+  }
   if(!S.billsSeeded){
     S.billsSeeded=1;
     const have=new Set(S.recur.map(r=>r.n+"|"+r.kind));
@@ -460,11 +468,11 @@ const openSheet=h=>{$("#sheetBody").innerHTML=h;$("#sheet").classList.add("on");
 const closeSheet=()=>$("#sheet").classList.remove("on");
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet();});
 function setTab(t){
-  const sub=(t==="history"||t==="subs"||t==="bills"||t==="setup");
-  if(sub&&!(view.tab==="history"||view.tab==="subs"||view.tab==="bills"||view.tab==="setup"))view.from=view.tab;
+  const sub=(t==="history"||t==="subs"||t==="bills"||t==="income"||t==="setup");
+  if(sub&&!(view.tab==="history"||view.tab==="subs"||view.tab==="bills"||view.tab==="income"||view.tab==="setup"))view.from=view.tab;
   view.tab=t;
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("on",p.id==="p-"+t));
-  const lit=(t==="subs"||t==="bills")?"pending":t==="history"?"stats":t;
+  const lit=(t==="subs"||t==="bills"||t==="income")?"pending":t==="history"?"stats":t;
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===lit));
   render();window.scrollTo(0,0);}
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
@@ -493,7 +501,23 @@ const cents=v=>Math.round(v*100)/100;
 
 /* accounts */
 const clearedSpend=()=>S.tx.filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
-const totalIncome=()=>sumOf(S.inc);
+const totalIncome=()=>S.inc.filter(x=>!x.p).reduce((a,t)=>a+t.a,0);
+const pendInc=()=>S.inc.filter(x=>x.p);
+const incClearedIn=i=>incIn(i).filter(t=>!t.p);
+const incPendingIn=i=>incIn(i).filter(t=>t.p);
+/* income occurrences still scheduled (not yet posted) inside cycle i */
+function scheduledIncome(i){
+  const c=cyc(i),today=todayIso();let tot=0;
+  for(const r of (S.recur||[])){
+    if((r.kind||"sub")!=="income"||!r.on||!r.next)continue;
+    let d=r.next,guard=0;
+    while(d<=c.e&&guard++<80){
+      if(d>=c.s&&d>today)tot+=+r.a;
+      d=advance(r,d);
+    }
+  }
+  return cents(tot);
+}
 const totalSaved=()=>S.sav.filter(x=>!x.p).reduce((a,t)=>a+t.a,0);
 const pendSav=()=>S.sav.filter(x=>x.p);
 const savIncoming=()=>-pendSav().filter(x=>x.a<0).reduce((a,t)=>a+t.a,0);
@@ -520,20 +544,20 @@ const accKind=a=>({bank:"income, less spending and savings",pending:"charged, no
 function render(){
   const c=cyc(view.cycle),rel=view.cycle-nowCycle();
   const cycleTabs=(view.tab==="plan"||view.tab==="add"||(view.tab==="log"&&!view.byAdded&&(!view.range||view.range==="cycle")&&!(view.q||"").trim()));
-  const subPage=(view.tab==="history"||view.tab==="subs"||view.tab==="bills"||view.tab==="setup");
+  const subPage=(view.tab==="history"||view.tab==="subs"||view.tab==="bills"||view.tab==="income"||view.tab==="setup");
   $("#cycleMeta").hidden=!cycleTabs;
   $("#prevCycle").hidden=!cycleTabs;
   $("#nextCycle").hidden=!cycleTabs;
   $("#backBtn").hidden=!subPage;
   $("#openSetup").hidden=view.tab==="setup";
   $("#pageTitle").hidden=cycleTabs;
-  $("#pageTitle").textContent={stats:"Home",history:"History",pending:"Pending",subs:"Subscriptions",bills:"Bills",setup:"Setup",log:view.byAdded?"Recently added":"Log"}[view.tab]||"";
+  $("#pageTitle").textContent={stats:"Home",history:"History",pending:"Pending",subs:"Subscriptions",bills:"Bills",income:"Income",setup:"Setup",log:view.byAdded?"Recently added":"Log"}[view.tab]||"";
   $("#cycleName").textContent=rel===0?"This cycle":rel===-1?"Last cycle":rel===1?"Next cycle":(rel<0?Math.abs(rel)+" cycles ago":"In "+rel+" cycles");
   $("#cycleDates").textContent=fmtShort(c.s)+" – "+fmtShort(c.e)+", "+dOf(c.e).getFullYear()+(rel!==0?"  ·  tap for now":"");
   $("#prevCycle").disabled=view.cycle<=0;
   $("#nextCycle").disabled=view.cycle>=S.cycles.length-1;
   $("#savebar").classList.toggle("on",view.tab==="add");
-  const np=pendingTx().length+pendSav().length;
+  const np=pendingTx().length+pendSav().length+pendInc().length;
   $("#penBadge").hidden=!np; $("#penBadge").textContent=np>99?"99+":np;
   $("#storeWarn").hidden=!memFallback;
   if(memFallback)$("#storeWarn").textContent="This browser won't let the app save to the device — entries will vanish when you close the tab. Open the file directly in Chrome, or install it from a hosted URL.";
@@ -542,6 +566,8 @@ function render(){
   if(view.tab==="pending")renderPending();
   if(view.tab==="subs")renderSubs();
   if(view.tab==="bills")renderBills();
+  if(view.tab==="income")renderIncome();
+  if(view.tab==="income")renderIncome();
   if(view.tab==="plan")renderPlan();
   if(view.tab==="log")renderLog();
   if(view.tab==="setup")renderSetup();
@@ -671,8 +697,10 @@ function openCarry(i){
 /* ---------- expected income ---------- */
 function expectedIn(i){
   if(S.expect&&S.expect[String(i)]!=null)return S.expect[String(i)];
+  const got=sumOf(incClearedIn(i)),pend=sumOf(incPendingIn(i)),sched=scheduledIncome(i);
+  if(pend||sched)return cents(got+pend+sched);
   const past=[];
-  for(let k=i-1;k>=0&&past.length<3;k--){const v=sumOf(incIn(k));if(v>0)past.push(v);}
+  for(let k=i-1;k>=0&&past.length<3;k--){const v=sumOf(incClearedIn(k));if(v>0)past.push(v);}
   return past.length?+(past.reduce((a,b)=>a+b,0)/past.length).toFixed(2):0;
 }
 function avgSpend(i,n){
@@ -832,6 +860,7 @@ function advance(r,iso){
   const d=dOf(iso);let y=d.getFullYear(),m=d.getMonth()+1;
   if(r.freq==="yearly")y+=1;
   else if(r.freq==="weekly")return addDays(iso,7);
+  else if(r.freq==="biweekly")return addDays(iso,14);
   else if(r.freq==="cycle")return addDays(iso,28);
   else {m+=1;if(m>12){m=1;y+=1;}}
   const day=Math.min(r.day||d.getDate(),daysInMonth(y,m));
@@ -844,7 +873,10 @@ function runRecurring(){
     let d=r.next,guard=0;
     while(d<=today&&guard++<60){
       const y=cycleFor(d);
-      S.tx.push({id:uid("t"),ts:Date.now(),d,n:r.n,a:+(+r.a).toFixed(2),s:r.s,r:r.r,k:r.k,y,p:1,src:r.id});
+      if((r.kind||"sub")==="income")
+        S.inc.push({id:uid("i"),ts:Date.now(),d,n:r.n,a:+(+r.a).toFixed(2),y,p:1,src:r.id});
+      else
+        S.tx.push({id:uid("t"),ts:Date.now(),d,n:r.n,a:+(+r.a).toFixed(2),s:r.s,r:r.r,k:r.k,y,p:1,src:r.id});
       made++;total+=+r.a;d=advance(r,d);
     }
     r.next=d;
@@ -854,11 +886,13 @@ function runRecurring(){
 }
 const recurOf=kind=>(S.recur||[]).filter(r=>(r.kind||"sub")===kind);
 const recurMonthlyOf=kind=>recurOf(kind).filter(r=>r.on)
-  .reduce((a,r)=>a+(+r.a)*(r.freq==="yearly"?1/12:r.freq==="weekly"?4.345:r.freq==="cycle"?365/28/12:1),0);
+  .reduce((a,r)=>a+(+r.a)*(r.freq==="yearly"?1/12:r.freq==="weekly"?4.345:r.freq==="biweekly"?26/12:r.freq==="cycle"?365/28/12:1),0);
 const recurMonthly=()=>(S.recur||[]).filter(r=>r.on)
   .reduce((a,r)=>a+(+r.a)*(r.freq==="yearly"?1/12:r.freq==="weekly"?4.345:r.freq==="cycle"?365/28/12:1),0);
 
 const RECUR_COPY={
+  income:{title:"Income",singular:"paycheck",empty:"No recurring income yet",
+    blurb:"Add your paycheck and it'll appear in Pending on payday, ready to tick off when it lands."},
   bill:{title:"Bills",singular:"bill",empty:"No bills yet",
     blurb:"Add one for every recurring bill — rent, car payment, insurance — and it'll charge itself on the day you set."},
   sub:{title:"Subscriptions",singular:"subscription",empty:"No subscriptions yet",
@@ -869,7 +903,7 @@ function renderRecurPage(kind){
   const list=recurOf(kind).slice().sort((a,b)=>(b.on-a.on)||(a.next<b.next?-1:1));
   const on=list.filter(r=>r.on);
   const c=cyc(view.cycle),due=on.filter(r=>r.next>=c.s&&r.next<=c.e);
-  const freqLbl={monthly:"every month",yearly:"once a year",weekly:"every week",cycle:"every 28 days"};
+  const freqLbl={monthly:"every month",biweekly:"every 2 weeks",yearly:"once a year",weekly:"every week",cycle:"every 28 days"};
   const line=r=>{
     const late=r.on&&r.next<todayIso();
     return `<button class="row" data-recur="${r.id}" style="${r.on?"":"opacity:.62"}">
@@ -880,11 +914,11 @@ function renderRecurPage(kind){
   const off=list.filter(r=>!r.on);
   const rows=on.map(line).join("")
     +(off.length?`<div class="daylabel">Paused · <span class="num">${money(off.reduce((a,r)=>a+ +r.a,0))} a month not being charged</span></div>`+off.map(line).join(""):"");
-  const target="p-"+(kind==="bill"?"bills":"subs");
+  const target="p-"+(kind==="bill"?"bills":kind==="income"?"income":"subs");
   $("#"+target).innerHTML=`
     <div class="card">
-      <h2>Every month</h2>
-      <div class="meter-amt num">${money(recurMonthlyOf(kind))}</div>
+      <h2>${kind==="income"?"Every month, roughly":"Every month"}</h2>
+      <div class="meter-amt num ${kind==="income"?"good":""}">${money(recurMonthlyOf(kind))}</div>
       <div class="meter-sub">${on.length} running${list.length-on.length?", "+(list.length-on.length)+" paused":""}</div>
     </div>
     <div class="card flush">${rows||`<div class="empty"><b>${cp.empty}</b>${cp.blurb}</div>`}</div>
@@ -897,12 +931,13 @@ function renderRecurPage(kind){
     </div>`;
 }
 function renderSubs(){renderRecurPage("sub");}
+function renderIncome(){renderRecurPage("income");}
 function renderBills(){renderRecurPage("bill");}
 function openRecur(id,kind){
   const r=id?(S.recur||[]).find(x=>x.id===id):null;
   const useKind=r?(r.kind||"sub"):(kind||"sub");
   const cp=RECUR_COPY[useKind];
-  const F={monthly:"Every month",cycle:"Every 28 days",weekly:"Every week",yearly:"Once a year"};
+  const F={monthly:"Every month",biweekly:"Every 2 weeks",cycle:"Every 28 days",weekly:"Every week",yearly:"Once a year"};
   openSheet(`<div class="sheethead"><h3>${r?esc(r.n):"New "+cp.singular}</h3><button class="close" data-close>×</button></div>
     <label class="f"><span>Name</span><input class="inp" id="qN" value="${r?esc(r.n):""}" placeholder="${useKind==='bill'?'e.g. Car Payment':'e.g. Crunchyroll'}"></label>
     <div class="f"><span>Status</span>
@@ -913,18 +948,19 @@ function openRecur(id,kind){
     <label class="f"><span>How often</span><select class="inp" id="qF">
       ${Object.entries(F).map(([k,v])=>`<option value="${k}" ${r&&(r.freq||"monthly")===k?"selected":""}>${v}</option>`).join("")}</select></label>
     <label class="f"><span>Next charge</span><input class="inp num" id="qD" type="date" value="${r?r.next:addDays(todayIso(),1)}"></label>
-    <div class="f"><span>Category</span><div id="qS"></div></div>
+    ${useKind==="income"?"":`<div class="f"><span>Category</span><div id="qS"></div></div>
     <div class="f"><span>Retailer</span><div id="qR"></div></div>
-    <div class="f"><span>Paid with</span><div id="qK"></div></div>
+    <div class="f"><span>Paid with</span><div id="qK"></div></div>`}
     ${r?`<div class="chips" style="margin-top:16px">
       <button type="button" class="chip" id="qSkip">Skip the next one</button></div>`:""}
     <button class="btn" id="qSave">${r?"Save":"Add "+cp.singular}</button>
-    ${r?`<button class="btn sm ghost" id="qNow">Charge it now — put ${money(r.a)} in Pending</button>
+    ${r?`<button class="btn sm ghost" id="qNow">${useKind==="income"?"Add it now":"Charge it now"} — put ${money(r.a)} in Pending</button>
     <button class="btn sm danger" id="qDel">Delete</button>`:""}`);
-  const qCat=combo($("#qS"),catItems,{value:r?r.s:(S.subs[0]||{}).id,allowNew:true,
+  const isInc=useKind==="income";
+  const qCat=isInc?null:combo($("#qS"),catItems,{value:r?r.s:(S.subs[0]||{}).id,allowNew:true,
     newLabel:"Add a new category called", onNew:(txt,pick)=>newCategoryFlow(txt,pick)});
-  const qRet=combo($("#qR"),retItems,{value:r?r.r:"",allowNew:true});
-  const qCard=combo($("#qK"),cardItems,{value:r?r.k:(S.cards[0]||{}).id});
+  const qRet=isInc?null:combo($("#qR"),retItems,{value:r?r.r:"",allowNew:true});
+  const qCard=isInc?null:combo($("#qK"),cardItems,{value:r?r.k:(S.cards[0]||{}).id});
   let on=r?!!r.on:true;
   function syncRun(){
     $("#qRun").classList.toggle("on",on);
@@ -941,8 +977,10 @@ function openRecur(id,kind){
     const n=$("#qN").value.trim();if(!n){toast("Give it a name");return;}
     const a=num($("#qA").value);if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
     const next=$("#qD").value||addDays(todayIso(),1);
-    const o={n,a:+a.toFixed(2),freq:$("#qF").value,next,day:dOf(next).getDate(),
-             s:qCat.id||(S.subs[0]||{}).id,r:retIdFor(qRet.text),k:qCard.id||(S.cards[0]||{}).id,on:on?1:0,kind:useKind};
+    const o=isInc
+      ? {n,a:+a.toFixed(2),freq:$("#qF").value,next,day:dOf(next).getDate(),on:on?1:0,kind:useKind}
+      : {n,a:+a.toFixed(2),freq:$("#qF").value,next,day:dOf(next).getDate(),
+         s:qCat.id||(S.subs[0]||{}).id,r:retIdFor(qRet.text),k:qCard.id||(S.cards[0]||{}).id,on:on?1:0,kind:useKind};
     if(r)Object.assign(r,o);else (S.recur=S.recur||[]).push(Object.assign({id:uid("q")},o));
     const fired=runRecurring();
     save();closeSheet();
@@ -951,7 +989,8 @@ function openRecur(id,kind){
     else{render();toast("Saved · first charge "+fmtShort(o.next));}};
   if(r)$("#qNow").onclick=()=>{
     const d=todayIso();
-    S.tx.push({id:uid("t"),ts:Date.now(),d,n:r.n,a:+(+r.a).toFixed(2),s:r.s,r:r.r,k:r.k,
+    if(isInc)S.inc.push({id:uid("i"),ts:Date.now(),d,n:r.n,a:+(+r.a).toFixed(2),y:cycleFor(d),p:1,src:r.id});
+    else S.tx.push({id:uid("t"),ts:Date.now(),d,n:r.n,a:+(+r.a).toFixed(2),s:r.s,r:r.r,k:r.k,
                y:cycleFor(d),p:1,src:r.id});
     r.next=advance(r,d);
     save();closeSheet();view.cycle=cycleFor(d);setTab("pending");
@@ -1018,16 +1057,16 @@ function renderHome(){
 
   const ci=nowCycle(),c=cyc(ci),cSpend=sumOf(txIn(ci)),cInc=sumOf(incIn(ci)),cSav=sumOf(savIn(ci));
   const cBud=Object.values(S.budgets[String(ci)]||{}).reduce((a,v)=>a+v,0);
-  const cTotal=cents(cInc-cSpend-cSav),cPend=sumOf(txIn(ci).filter(t=>t.p));
+  const cLeft=cents(cBud-cSpend),cPend=sumOf(txIn(ci).filter(t=>t.p));
   const today=todayIso();let el=today<c.s?0:today>c.e?28:between(today,c.s)+1;
   const pct=cBud>0?Math.min(100,cSpend/cBud*100):(cSpend>0?100:0);
   const thisCycle=`<div class="card" style="padding:15px 16px">
       <div class="legend"><span>This cycle · ${fmtShort(c.s)} – ${fmtShort(c.e)} · day ${el} of 28</span>
         <button class="chip" data-tabjump="plan" style="padding:4px 12px;min-height:30px">Open</button></div>
-      <div class="bar ${cBud>0&&cSpend>cBud?"over":""}" style="margin:12px 0 6px"><div class="fill" style="width:${pct}%"></div>
+      <div class="bar ${cLeft<0?"over":""}" style="margin:12px 0 6px"><div class="fill" style="width:${pct}%"></div>
         ${el>0&&el<28?`<div class="pace" style="left:${el/28*100}%"></div>`:""}</div>
       <div class="legend num"><span>${money(cSpend)} of ${money(cBud)} planned</span>
-        <b style="${cTotal<0?"color:var(--over)":"color:var(--good)"}">${money(cTotal)} ${cTotal<0?"short":"left"} after savings</b></div>
+        <b style="${cLeft<0?"color:var(--over)":cLeft>0?"color:var(--good)":""}">${money(Math.abs(cLeft))} ${cLeft<0?"over budget":cLeft>0?"left in budget":"budget fully spent"}</b></div>
       <div class="stats">
         <div class="stat in"><b class="num">${money0(cInc)}</b><span>income</span></div>
         <div class="stat"><b class="num">${money0(cSpend)}</b><span>spent</span></div>
@@ -1127,6 +1166,15 @@ function renderHistory(){
 function renderPending(){
   const list=pendingTx().slice().sort((a,b)=>a.d<b.d?1:-1);
   const psav=pendSav().slice().sort((a,b)=>a.d<b.d?1:-1);
+  const pinc=pendInc().slice().sort((a,b)=>a.d<b.d?1:-1);
+  const incBlock=pinc.length?`<div class="card flush" style="margin-top:12px">
+      <div class="daylabel" style="border-top:none">Income on the way · <span class="num">${money(sumOf(pinc))}</span></div>
+      ${pinc.map(t=>`<div class="row">
+        <button class="check" data-clearinc="${t.id}" aria-label="Mark as received">✓</button>
+        <button class="main" style="text-align:left;padding:0" data-edit="${t.id}" data-kind="inc">
+          <b>${esc(t.n)}</b><span>${fmtShort(t.d)} · not in the account yet</span></button>
+        <div class="amt in num">${money(t.a,true)}</div></div>`).join("")}
+    </div>`:"";
   const savBlock=psav.length?`<div class="card flush" style="margin-top:12px">
       <div class="daylabel" style="border-top:none">Savings transfers on the way · <span class="num">${money(savIncoming())}</span></div>
       ${psav.map(t=>`<div class="row">
@@ -1137,15 +1185,16 @@ function renderPending(){
     </div>`:"";
   const total=openBalance();
   const charges=list.filter(t=>t.a>0),refs=list.filter(t=>t.a<0);
-  if(!list.length&&!psav.length){
+  if(!list.length&&!psav.length&&!pinc.length){
     $("#p-pending").innerHTML=`<div class="card flush"><div class="empty"><b>Nothing waiting</b>
       Everything you've logged has cleared. Mark an entry as pending when you've paid but it hasn't hit the account yet.</div></div>
-      <div class="card"><button class="btn sm ghost" data-tabjump="bills">Bills · ${money(recurMonthlyOf("bill"))} a month</button>
+      <div class="card"><button class="btn sm ghost" data-tabjump="income">Income · ${money(recurMonthlyOf("income"))} a month</button>
+        <button class="btn sm ghost" data-tabjump="bills">Bills · ${money(recurMonthlyOf("bill"))} a month</button>
         <button class="btn sm ghost" data-tabjump="subs">Subscriptions · ${money(recurMonthlyOf("sub"))} a month</button></div>`;
     return;
   }
   if(!list.length){
-    $("#p-pending").innerHTML=savBlock+`<div class="card"><button class="btn sm ghost" data-tabjump="subs">Subscriptions · ${money(recurMonthly())} a month</button></div>`;
+    $("#p-pending").innerHTML=incBlock+savBlock+`<div class="card"><button class="btn sm ghost" data-tabjump="subs">Subscriptions · ${money(recurMonthly())} a month</button></div>`;
     return;
   }
   const byCard={};
@@ -1171,9 +1220,10 @@ function renderPending(){
         <div class="stat"><b class="num" style="${freeToSpend()<floorOf()?"color:var(--over)":""}">${money(freeToSpend())}</b><span>once it all clears</span></div>
       </div>
     </div>
-    <div class="card"><button class="btn sm ghost" data-tabjump="bills">Bills · ${money(recurMonthlyOf("bill"))} a month</button>
+    <div class="card"><button class="btn sm ghost" data-tabjump="income">Income · ${money(recurMonthlyOf("income"))} a month</button>
+      <button class="btn sm ghost" data-tabjump="bills">Bills · ${money(recurMonthlyOf("bill"))} a month</button>
       <button class="btn sm ghost" data-tabjump="subs">Subscriptions · ${money(recurMonthlyOf("sub"))} a month</button></div>
-    <div class="card flush" style="margin-top:12px">${body}</div>${savBlock}
+    <div class="card flush" style="margin-top:12px">${body}</div>${incBlock}${savBlock}
     <div class="card"><button class="btn sm ghost" id="clearAll">Mark everything as cleared</button></div>`;
 }
 
@@ -1193,12 +1243,16 @@ function renderPlan(){
   const today=todayIso();let el=today<c.s?0:today>c.e?28:between(today,c.s)+1;
   const daysLeft=Math.max(0,28-el);
   const alloc=cents(budget);
-  const expIn=expectedIn(i),gotIn=income,toCome=Math.max(0,expIn-gotIn);
+  const gotIn=sumOf(incClearedIn(i)),pendIn=sumOf(incPendingIn(i));
+  const expIn=expectedIn(i),toCome=cents(Math.max(0,expIn-gotIn-pendIn));
   const fromSav=savIncoming(),opening=openingBal(i);
   const spentClear=txIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const savedOut=savIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const pendOut=openBalance(),pre=preorders();
-  const onHand=freeToSpend(),cover=cents(onHand+toCome+fromSav),gap=cents(cover-alloc);
+  /* the pot the plan draws on: what you started with plus everything coming in.
+     spending is NOT subtracted here — the plan lines already measure it. */
+  const cover=cents(opening+gotIn+pendIn+toCome+fromSav-pre),gap=cents(cover-alloc);
+  const onHand=freeToSpend();
 
   if(cv==="plan"){
     const hero=`<div class="card">
@@ -1277,15 +1331,21 @@ function renderPlan(){
     </div>
     <div class="card flush">
       <div class="daylabel" style="border-top:none">Where that ${money(cover)} comes from</div>
-      ${ln("Left over when the cycle began",opening,"everything you hadn't spent yet")}
-      ${ln("Income so far",gotIn,null,"in")}
+      ${ln("Left over when the cycle began",opening,"what was in checking on "+fmtShort(c.s))}
+      ${ln("Income received",gotIn,null,"in")}
+      ${pendIn?ln("Income on the way",pendIn,"already scheduled","in"):""}
       ${toCome?ln("Still expected in",toCome,"tap below to change","in"):""}
       ${fromSav?ln("Coming out of savings",fromSav,null,"sv"):""}
-      ${spentClear?ln("Spent so far",-spentClear):""}
-      ${savedOut?ln("Put into savings",-savedOut,null,"sv"):""}
-      ${pendOut?ln("Charges not cleared",-pendOut,null,"over"):""}
       ${pre?ln("Preorders",-pre):""}
       <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>To cover the plan</b></div><div class="amt num">${money(cover)}</div></div>
+    </div>
+    <div class="card flush">
+      <div class="daylabel" style="border-top:none">Against that, so far</div>
+      ${ln("Spent",-spentClear)}
+      ${pendOut?ln("Charges not cleared",-pendOut,null,"over"):""}
+      ${savedOut?ln("Put into savings",-savedOut,null,"sv"):""}
+      <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>Free to spend right now</b>
+        <span>checking less pending</span></div><div class="amt num ${onHand<0?"over":onHand>0?"good":""}">${money(onHand)}</div></div>
     </div>
     <div class="card">
       <div class="legend" style="margin-bottom:8px"><span>You usually spend</span><b class="num">${money(avgSpend(i,6))}</b></div>
@@ -1421,6 +1481,7 @@ function renderSetup(){
     <div class="hint" style="margin:6px 0 0">Open a list to rename or delete anything in it.</div>
     <button class="btn sm ghost" data-list="card">Payment methods (${S.cards.length})</button>
     <button class="btn sm ghost" data-list="line">Plan lines (${S.lines.length})</button>
+    <button class="btn sm ghost" data-tabjump="income">Income (${recurOf("income").filter(r=>r.on).length})</button>
     <button class="btn sm ghost" data-tabjump="bills">Bills (${recurOf("bill").filter(r=>r.on).length})</button>
     <button class="btn sm ghost" data-tabjump="subs">Subscriptions (${recurOf("sub").filter(r=>r.on).length})</button>
     <button class="btn sm ghost" id="setupFavs">Favourites (${(S.favs||[]).length})</button>
@@ -1590,6 +1651,8 @@ function openEdit(id,kind){
     <div class="f"><span>Retailer</span><div id="eR"></div></div>
     <div class="f"><span>Paid with</span><div id="eK"></div></div>`:""}
     <label class="f"><span>Date</span><input class="inp num" id="eD" type="date" value="${rec.d}"></label>
+    ${kind==="inc"?`<div class="chips" style="margin-top:16px">
+      <button type="button" class="chip ${rec.p?"on":""}" id="eIp">${rec.p?"⏳ Not received":"✓ Received"}</button></div>`:""}
     ${kind==="sav"?`<div class="chips" style="margin-top:16px">
       <button type="button" class="chip ${rec.a<0?"on":""}" id="eWd">${rec.a<0?"↩ Taken out":"Put away"}</button>
       <button type="button" class="chip ${rec.p?"on":""}" id="eSp">${rec.p?"⏳ Not landed":"✓ Landed"}</button></div>`:""}
@@ -1610,6 +1673,12 @@ function openEdit(id,kind){
     $("#eFlip").onclick=()=>{flip=!flip;$("#eFlip").classList.toggle("on",flip);
       $("#eFlip").textContent=flip?"↩ It's a refund":"Make it a refund";rec._f=flip;};
     rec._p=pend;rec._f=flip;
+  }
+  if(kind==="inc"){
+    let ip=!!rec.p;
+    $("#eIp").onclick=()=>{ip=!ip;$("#eIp").classList.toggle("on",ip);
+      $("#eIp").textContent=ip?"⏳ Not received":"✓ Received";rec._ip=ip;};
+    rec._ip=ip;
   }
   if(kind==="sav"){
     let sp=!!rec.p;
@@ -1652,6 +1721,7 @@ function openEdit(id,kind){
     const a=num($("#eA").value); if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
     rec.a=+a.toFixed(2); rec.n=$("#eN").value.trim()||rec.n;
     if($("#eD").value){rec.d=$("#eD").value;rec.y=cycleFor(rec.d);}
+    if(kind==="inc"){if(rec._ip)rec.p=1;else delete rec.p; delete rec._ip;}
     if(kind==="sav"){rec.a=rec._w?-Math.abs(rec.a):Math.abs(rec.a);
       if(rec._sp)rec.p=1;else delete rec.p; delete rec._w;delete rec._sp;}
     if(kind==="tx"){rec.s=eCat.id||rec.s;rec.r=retIdFor(eRet.text);rec.k=eCard.id||rec.k;
@@ -1965,6 +2035,10 @@ document.addEventListener("click",e=>{
     view.pick=view.pick===i?null:i;renderHistory();return;}
   const ct=t.closest("[data-cat]");if(ct){
     view.openCat=view.openCat===ct.dataset.cat?null:ct.dataset.cat;renderHistory();return;}
+  const cin=t.closest("[data-clearinc]");if(cin){
+    const rec=S.inc.find(x=>x.id===cin.dataset.clearinc);
+    if(rec){delete rec.p;save();render();undoToast(money(rec.a)+" received",()=>{rec.p=1;save();render();});}
+    return;}
   const cs=t.closest("[data-clearsav]");if(cs){
     const rec=S.sav.find(x=>x.id===cs.dataset.clearsav);
     if(rec){delete rec.p;save();render();toast(money(Math.abs(rec.a))+" landed");}
@@ -1981,8 +2055,8 @@ document.addEventListener("click",e=>{
     case "openSetup":setTab("setup");return;
     case "backBtn":setTab(view.from||"stats");return;
     case "clearAll":
-      if(confirm("Mark all "+(pendingTx().length+pendSav().length)+" pending entries as cleared?")){
-        S.tx.forEach(x=>{delete x.p;});S.sav.forEach(x=>{delete x.p;});save();render();toast("All cleared");}
+      if(confirm("Mark all "+(pendingTx().length+pendSav().length+pendInc().length)+" pending entries as cleared?")){
+        S.tx.forEach(x=>{delete x.p;});S.sav.forEach(x=>{delete x.p;});S.inc.forEach(x=>{delete x.p;});save();render();toast("All cleared");}
       return;
   }
   switch(t.id){
