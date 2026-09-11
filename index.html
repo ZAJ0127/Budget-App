@@ -1306,7 +1306,7 @@ function renderPlan(){
       for(const c2 of cs){
         roll+=`<div class="row"><div class="main"><b>${esc(c2.name)}</b></div><div class="amt num">${money(tot[c2.id].n)}</div></div>`;
         const ss=Object.entries(tot[c2.id].subs).sort((a,b)=>b[1]-a[1]);
-        if(ss.length>1)for(const[sid,v]of ss)
+        for(const[sid,v]of ss)
           roll+=`<div class="row sub"><div class="main"><b>${esc(subName(sid))}</b></div><div class="amt num" style="font-weight:500;color:var(--muted)">${money(v)}</div></div>`;
       }
     }
