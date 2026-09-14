@@ -1614,7 +1614,7 @@ $("#saveEntry").onclick=()=>{
   view.cycle=y;
   toast(view.mode==="spend"&&view.refund?"Refund of "+money(a)+" logged"
        :view.mode==="save"&&view.wdraw?money(a)+" taken out of savings":"Added "+money(a));
-  view.refund=false;view.wdraw=false;view.pend=false;setMode(view.mode);render();
+  view.refund=false;view.wdraw=false;view.pend=true;setMode(view.mode);render();
 };
 
 /* ---------- edit ---------- */
@@ -1742,17 +1742,43 @@ function openLine(lid){
   const covers=l.kind==="savings"?"Everything you move to savings"
     :l.kind==="group"?"Everything in "+(byId(S.groups,l.g)||{name:"?"}).name
     :l.subs.map(subName).join(", ");
+  /* what the whole cycle has to work with, and what's left unallocated */
+  const opening=openingBal(i);
+  const gotIn=sumOf(incClearedIn(i)),pendIn=sumOf(incPendingIn(i));
+  const expIn=expectedIn(i),toCome=cents(Math.max(0,expIn-gotIn-pendIn));
+  const cover=cents(opening+gotIn+pendIn+toCome+savIncoming()-preorders());
+  const allocOther=cents(rows.reduce((a,r)=>a+r.bud,0)-row.bud);
+  const freeToAllocate=cents(cover-allocOther);
   openSheet(`<div class="sheethead"><h3>${esc(l.name)}</h3>
     <span class="hint" style="margin:0">${fmtShort(cyc(i).s)} – ${fmtShort(cyc(i).e)}</span>
     <button class="close" data-close>×</button></div>
+    <div class="card flush" style="margin-top:12px">
+      <div class="row" style="padding:10px 15px"><div class="main"><b style="font-weight:480">Money in the cycle</b>
+        <span>opening balance plus all income</span></div><div class="amt num">${money(cover)}</div></div>
+      <div class="row" style="padding:10px 15px"><div class="main"><b style="font-weight:480">Allocated to other lines</b></div>
+        <div class="amt num">−${money(allocOther)}</div></div>
+      <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>Available for this line</b></div>
+        <div class="amt num ${freeToAllocate<0?"over":freeToAllocate>0?"good":""}">${money(freeToAllocate)}</div></div>
+    </div>
     <label class="f"><span>Budget for this cycle</span>
-      <div class="money-in sm"><i>${esc(S.settings.symbol)}</i><input class="num" id="lB" type="text" inputmode="decimal" value="${row.bud||""}" placeholder="0.00"></div></label>
+      <div class="money-in sm"><i>${esc(S.settings.symbol)}</i><input class="num" id="lB" type="text" inputmode="decimal" value="${row.bud||""}" placeholder="0.00"></div>
+      <div class="hint" id="lHint"></div></label>
     <div class="card" style="margin-top:14px"><div class="legend"><span>Spent so far</span><b class="num">${money(row.spent)}</b></div>
       <div class="legend" style="margin-top:6px"><span>${row.rem<0?"Over by":row.rem>0?"Remaining":"Nothing left"}</span><b class="num" style="${row.rem<0?'color:var(--over)':row.rem>0?'color:var(--good)':''}">${money(Math.abs(row.rem))}</b></div></div>
     <div class="hint" style="margin-top:12px">Counts: ${esc(covers)}</div>
     <button class="btn" id="lSave">Save budget</button>
+    <button class="btn sm ghost" id="lUseAll">Use all ${money(Math.max(0,freeToAllocate))}</button>
     <button class="btn sm ghost" id="lAll">Use this amount for every later cycle</button>`);
   const val=()=>{const v=num($("#lB").value);return isFinite(v)&&v>0?+v.toFixed(2):0;};
+  function syncHint(){
+    const left=cents(freeToAllocate-val());
+    $("#lHint").textContent=left<0
+      ? money(Math.abs(left))+" more than the cycle has left"
+      : left>0 ? money(left)+" would still be unallocated" : "allocates the cycle to the penny";
+    $("#lHint").classList.toggle("warn",left<0);
+  }
+  $("#lB").addEventListener("input",syncHint); syncHint();
+  $("#lUseAll").onclick=()=>{$("#lB").value=Math.max(0,freeToAllocate).toFixed(2);syncHint();};
   $("#lSave").onclick=()=>{b[lid]=val();save();closeSheet();render();toast("Budget saved");};
   $("#lAll").onclick=()=>{const v=val();
     for(let k=i;k<S.cycles.length;k++){S.budgets[String(k)]=S.budgets[String(k)]||{};S.budgets[String(k)][lid]=v;}
@@ -2129,7 +2155,7 @@ document.addEventListener("touchend",e=>{
 },{passive:true});
 
 load();fillSelects();
-view.cycle=nowCycle();view.win=+S.settings.statsWin||0;view.cyView="plan";setMode("spend");setDate(todayIso());
+view.cycle=nowCycle();view.win=+S.settings.statsWin||0;view.cyView="plan";view.pend=true;setMode("spend");setDate(todayIso());
 if(S.cards[0])$("#fCard").value=S.cards[0].id;
 const fired=runRecurring();
 setTab("stats");
