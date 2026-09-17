@@ -1197,17 +1197,27 @@ function renderPending(){
     $("#p-pending").innerHTML=incBlock+savBlock+`<div class="card"><button class="btn sm ghost" data-tabjump="subs">Subscriptions · ${money(recurMonthly())} a month</button></div>`;
     return;
   }
-  const byCard={};
-  for(const t of list){(byCard[t.k]=byCard[t.k]||[]).push(t);}
+  const groupBy=view.pendBy==="ret"?"ret":"card";
+  const seg=`<div class="card" style="padding:12px 14px"><div class="seg">
+      <button class="${groupBy==="card"?"on":""}" data-pendby="card">By card</button>
+      <button class="${groupBy==="ret"?"on":""}" data-pendby="ret">By retailer</button>
+    </div></div>`;
+  const groups={};
+  for(const t of list){const key=groupBy==="ret"?(t.r||""):(t.k||"");(groups[key]=groups[key]||[]).push(t);}
+  const label=k=>groupBy==="ret"?(retName(k)||"No retailer"):(cardName(k)||"No card");
+  const keys=Object.keys(groups).sort((a,b)=>label(a).localeCompare(label(b)));
   let body="";
-  for(const k in byCard){
-    const g=byCard[k];
-    body+=`<div class="daylabel">${esc(cardName(k)||"No card")} · <span class="num">${money(sumOf(g))}</span></div>`;
+  for(const k of keys){
+    const g=groups[k];
+    body+=`<div class="daylabel" style="display:flex;justify-content:space-between;align-items:center">
+        <span>${esc(label(k))} · <span class="num">${money(sumOf(g))}</span></span>
+        <button data-clearall="${groupBy}:${esc(k)}" style="color:var(--accent);font-weight:600;font-size:12px">Clear all ${g.length}</button>
+      </div>`;
     body+=g.map(t=>`<div class="row">
       <button class="check" data-clear="${t.id}" aria-label="Mark as cleared">✓</button>
       <button class="main" style="text-align:left;padding:0" data-edit="${t.id}" data-kind="tx">
         <b>${esc(t.n||subName(t.s))}</b>
-        <span>${fmtShort(t.d)} · ${esc(subName(t.s))}${t.r?" · "+esc(retName(t.r)):""}</span></button>
+        <span>${fmtShort(t.d)} · ${esc(subName(t.s))}${groupBy==="card"&&t.r?" · "+esc(retName(t.r)):""}${groupBy==="ret"&&t.k?" · "+esc(cardName(t.k)):""}</span></button>
       ${amtHtml(t.a)}</div>`).join("");
   }
   $("#p-pending").innerHTML=lowWarning()+`
@@ -1223,7 +1233,7 @@ function renderPending(){
     <div class="card"><button class="btn sm ghost" data-tabjump="income">Income · ${money(recurMonthlyOf("income"))} a month</button>
       <button class="btn sm ghost" data-tabjump="bills">Bills · ${money(recurMonthlyOf("bill"))} a month</button>
       <button class="btn sm ghost" data-tabjump="subs">Subscriptions · ${money(recurMonthlyOf("sub"))} a month</button></div>
-    <div class="card flush" style="margin-top:12px">${body}</div>${incBlock}${savBlock}
+    ${seg}<div class="card flush" style="margin-top:12px">${body}</div>${incBlock}${savBlock}
     <div class="card"><button class="btn sm ghost" id="clearAll">Mark everything as cleared</button></div>`;
 }
 
@@ -2065,6 +2075,15 @@ document.addEventListener("click",e=>{
     view.pick=view.pick===i?null:i;renderHistory();return;}
   const ct=t.closest("[data-cat]");if(ct){
     view.openCat=view.openCat===ct.dataset.cat?null:ct.dataset.cat;renderHistory();return;}
+  const pb=t.closest("[data-pendby]");if(pb){view.pendBy=pb.dataset.pendby;renderPending();return;}
+  const ca=t.closest("[data-clearall]");if(ca){
+    const raw=ca.dataset.clearall,mode=raw.slice(0,raw.indexOf(":")),key=raw.slice(raw.indexOf(":")+1);
+    const hit=pendingTx().filter(x=>(mode==="ret"?(x.r||""):(x.k||""))===key);
+    if(!hit.length)return;
+    const nm=mode==="ret"?(retName(key)||"No retailer"):(cardName(key)||"No card");
+    hit.forEach(x=>{delete x.p;});save();render();
+    undoToast(hit.length+" cleared for "+nm,()=>{hit.forEach(x=>{x.p=1;});save();render();});
+    return;}
   const cin=t.closest("[data-clearinc]");if(cin){
     const rec=S.inc.find(x=>x.id===cin.dataset.clearinc);
     if(rec){delete rec.p;save();render();undoToast(money(rec.a)+" received",()=>{rec.p=1;save();render();});}
