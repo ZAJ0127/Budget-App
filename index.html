@@ -1319,9 +1319,13 @@ function renderPlan(){
 
   /* money */
   const covPct=cover>0?Math.min(100,alloc/cover*100):(alloc>0?100:0);
-  const ln=(lab,val,note,cls)=>`<div class="row" style="padding:9px 15px">
-    <div class="main"><b style="font-weight:480;font-size:14.5px">${lab}</b>${note?`<span>${note}</span>`:""}</div>
-    <div class="amt num ${cls||""}" style="font-size:14.5px">${val<0?"−":""}${money(Math.abs(val))}</div></div>`;
+  const ln=(lab,val,note,cls,act)=>{
+    const inner=`<div class="main"><b style="font-weight:480;font-size:14.5px">${lab}</b>${note?`<span>${note}</span>`:""}</div>
+      <div class="amt num ${cls||""}" style="font-size:14.5px">${val<0?"−":""}${money(Math.abs(val))}</div>`;
+    return act
+      ? `<button class="row" style="padding:9px 15px" ${act}>${inner}</button>`
+      : `<div class="row" style="padding:9px 15px">${inner}</div>`;
+  };
   const adds=`<div class="card">
       <h2>Does the plan add up?</h2>
       <div class="meter-amt num ${gap<0?"over":gap>0?"good":""}" style="font-size:32px">${money(Math.abs(gap))}</div>
@@ -1331,10 +1335,10 @@ function renderPlan(){
     </div>
     <div class="card flush">
       <div class="daylabel" style="border-top:none">Where that ${money(cover)} comes from</div>
-      ${ln("Left over when the cycle began",opening,"what was in checking on "+fmtShort(c.s))}
+      ${ln("Left over when the cycle began",opening,"what was in checking on "+fmtShort(c.s)+" · tap to adjust",null,`data-carry="${i}"`)}
       ${ln("Income received",gotIn,null,"in")}
       ${pendIn?ln("Income on the way",pendIn,"already scheduled","in"):""}
-      ${toCome?ln("Still expected in",toCome,"tap below to change","in"):""}
+      ${ln("Still expected in",toCome,"tap to change what you expect this cycle","in",`data-expect="${i}"`)}
       ${fromSav?ln("Coming out of savings",fromSav,null,"sv"):""}
       ${pre?ln("Preorders",-pre):""}
       <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>To cover the plan</b></div><div class="amt num">${money(cover)}</div></div>
