@@ -239,6 +239,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
         <div class="f" id="wCard"><span>Paid with</span><div id="fCard"></div></div>
       </div>
       <div class="f" id="wRet"><span>Retailer</span><div id="fRet"></div></div>
+      <div class="f" id="wSavAcct"><span id="lblSavAcct">Savings account</span><div id="fSavAcct"></div></div>
       <label class="f"><span>Date</span>
         <div class="datewrap">
           <input class="inp num" id="fDateText" type="text" placeholder="9/5/26 or 090526" autocomplete="off">
@@ -477,12 +478,14 @@ function setTab(t){
   render();window.scrollTo(0,0);}
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
 
-let cCat,cRet,cCard;
+let cCat,cRet,cCard,cSav;
 function fillSelects(){
-  const keep=[cCat&&cCat.id,cRet&&cRet.id,cCard&&cCard.id];
+  const keep=[cCat&&cCat.id,cRet&&cRet.id,cCard&&cCard.id,cSav&&cSav.id];
   cCat =combo($("#fCat"), catItems , {value:keep[0]||(S.subs[0]||{}).id, placeholder:"Type or pick a category",
     allowNew:true, newLabel:"Add a new category called", onNew:(txt,pick)=>newCategoryFlow(txt,pick)});
   cRet =combo($("#fRet"), retItems , {value:keep[1]||"", allowNew:true, placeholder:"Type or pick a retailer"});
+  cSav =combo($("#fSavAcct"), savAcctItems, {value:keep[3]||(savAcctItems()[0]||{}).id,
+    allowNew:true, placeholder:"Type or pick an account"});
   cCard=combo($("#fCard"),cardItems, {value:keep[2]||(S.cards[0]||{}).id, placeholder:"Type or pick"});
 }
 
@@ -853,6 +856,8 @@ const catItems=()=>{const out=[];
   return out;};
 const retItems=()=>S.retailers.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({id:r.id,name:r.name}));
 const cardItems=()=>S.cards.map(c=>({id:c.id,name:c.name}));
+const savAcctItems=()=>S.accounts.filter(a=>a.type==="linked"||a.type==="savings")
+  .map(a=>({id:a.id,name:a.name}));
 
 /* ---------- subscriptions ---------- */
 function daysInMonth(y,m){return new Date(y,m,0).getDate();}
@@ -1393,11 +1398,15 @@ function logMatches(r,kind){
     const c=catOf(r.s);if(c)bits.push(c.name);}
   else bits.push(kind==="inc"?"income":"savings");
   bits.push(String(Math.abs(r.a).toFixed(2)),fmtFull(r.d));
-  return bits.join(" ").toLowerCase().includes(q);
+  /* every word must appear somewhere; hyphens and punctuation count as spaces,
+     so "chick fil" finds "Chick-Fil-A" */
+  const norm=x=>x.toLowerCase().replace(/[-_/.,&'’]+/g," ").replace(/\s+/g," ");
+  const hay=" "+norm(bits.join(" "))+" ";
+  return norm(q).split(" ").filter(Boolean).every(w=>hay.includes(w));
 }
 function activeFilterCount(){
   let n=0;const R=view.range||"cycle";
-  if(R!=="cycle")n++; if(view.filter)n++; if(view.byAdded)n++;
+  if(R!=="cycle")n++; if(view.fCard)n++; if(view.fCat)n++; if(view.fRet)n++; if(view.byAdded)n++; if((view.kind||"tx")!=="tx")n++;
   return n;
 }
 function openFilters(){
@@ -1410,10 +1419,14 @@ function openFilters(){
       <button class="chip ${custom?"on":""}" data-range="custom">Between dates</button></div>
       ${custom?`<div class="rangewrap"><label>From<input type="date" id="rFrom" value="${R.from}"></label>
         <label>To<input type="date" id="rTo" value="${R.to}"></label></div>`:""}</div>
+    <div class="f"><span>Show</span><div class="chips">
+      ${[["all","Everything"],["tx","Spending"],["inc","Income"],["sav","Savings"]].map(([k,l])=>
+        `<button class="chip ${(view.kind||"tx")===k?"on":""}" data-kind2="${k}">${l}</button>`).join("")}</div></div>
     <div class="f"><span>Category</span><div id="filtCat"></div></div>
+    <div class="f"><span>Store</span><div id="filtRet"></div></div>
     <div class="f"><span>Paid with</span><div class="chips">
-      <button class="chip ${view.filter&&view.filter.type==="card"?"":"on"}" data-filter="">Any card</button>
-      ${cards.map(c=>`<button class="chip ${view.filter&&view.filter.type==="card"&&view.filter.id===c.id?"on":""}" data-filter="card:${c.id}">${esc(c.name)}</button>`).join("")}</div></div>
+      <button class="chip ${view.fCard?"":"on"}" data-filter="">Any card</button>
+      ${cards.map(c=>`<button class="chip ${view.fCard===c.id?"on":""}" data-filter="card:${c.id}">${esc(c.name)}</button>`).join("")}</div></div>
     <div class="f"><span>Order</span><div class="seg">
       <button class="${view.byAdded?"":"on"}" data-sort="date">By date</button>
       <button class="${view.byAdded?"on":""}" data-sort="added">As I added them</button></div></div>
@@ -1427,26 +1440,39 @@ function openFilters(){
     }
     return out;
   };
-  const cur=view.filter&&(view.filter.type==="cat"||view.filter.type==="sub")?view.filter.type+":"+view.filter.id:"";
+  const cur=view.fCat?view.fCat.type+":"+view.fCat.id:"";
   const cCombo=combo($("#filtCat"),catFilterItems,{value:cur,placeholder:"Any category",
-    onPick:(v)=>{if(!v){view.filter=null;render();return;}
-      const[t,id]=v.split(":");view.filter={type:t,id};render();}});
+    onPick:(v)=>{if(!v){view.fCat=null;render();return;}
+      const[t,id]=v.split(":");view.fCat={type:t,id};render();}});
   if(!cur)cCombo.set("");
+  const usedRet=new Set(S.tx.map(t=>t.r).filter(Boolean));
+  const retFilterItems=()=>S.retailers.filter(r=>usedRet.has(r.id))
+    .sort((a,b)=>a.name.localeCompare(b.name)).map(r=>({id:r.id,name:r.name}));
+  const rCombo=combo($("#filtRet"),retFilterItems,{value:view.fRet||"",placeholder:"Any store",
+    onPick:(v)=>{view.fRet=v||null;render();}});
+  if(!view.fRet)rCombo.set("");
 }
 function renderLog(){
   const q=(view.q||"").trim(),R=view.range||"cycle",nf=activeFilterCount();
-  let items=S.tx.map(r=>[r,"tx"]);
-  if(q)items=items.concat(S.inc.map(r=>[r,"inc"]),S.sav.map(r=>[r,"sav"]));
+  const kind=view.kind||"tx";
+  let items=[];
+  if(kind==="tx"||kind==="all")items=items.concat(S.tx.map(r=>[r,"tx"]));
+  if(kind==="inc"||kind==="all")items=items.concat(S.inc.map(r=>[r,"inc"]));
+  if(kind==="sav"||kind==="all")items=items.concat(S.sav.map(r=>[r,"sav"]));
+  if(q&&kind==="tx")items=items.concat(S.inc.map(r=>[r,"inc"]),S.sav.map(r=>[r,"sav"]));
   items=items.filter(([r,k])=>inRange(r.d,r.y)&&logMatches(r,k));
-  if(view.filter&&!q){const f=view.filter;
-    items=items.filter(([r,k])=>k!=="tx"?false:f.type==="card"?r.k===f.id:f.type==="cat"?(catOf(r.s)||{}).id===f.id:f.type==="sub"?r.s===f.id:true);}
+  if(view.fCard)items=items.filter(([r,k])=>k==="tx"&&r.k===view.fCard);
+  if(view.fRet)items=items.filter(([r,k])=>k==="tx"&&r.r===view.fRet);
+  if(view.fCat){const f=view.fCat;
+    items=items.filter(([r,k])=>k==="tx"&&(f.type==="sub"?r.s===f.id:(catOf(r.s)||{}).id===f.id));}
   const spendTot=items.filter(([r,k])=>k==="tx").reduce((a,[r])=>a+r.a,0);
   const scope=R==="cycle"?"":R==="c3"?"Last 3 cycles":R==="all"?"All time":(R.from?fmtShort(R.from)+" – "+fmtShort(R.to):"");
+  const kindLbl={tx:"",inc:"income",sav:"savings",all:"everything"}[kind]||"";
   const head=`<div class="card" style="padding:12px 14px">
-      <div class="two"><div class="searchwrap" style="flex:1"><input class="inp" id="logQ" value="${esc(q)}" placeholder="Search" autocomplete="off">
+      <div class="two"><div class="searchwrap" style="flex:1"><input class="inp" id="logQ" value="${esc(view.q||"")}" placeholder="Search" autocomplete="off">
           ${q?`<button id="logQx" aria-label="Clear">×</button>`:""}</div>
         <button class="chip ${nf?"on":""}" id="openFilters" style="flex:none">Filters${nf?" · "+nf:""}</button></div>
-      <div class="legend" style="margin-top:9px"><span>${items.length} ${q?"match"+(items.length===1?"":"es"):"entr"+(items.length===1?"y":"ies")}${scope?" · "+scope:""}${view.filter?" · "+esc(view.filter.type==="card"?cardName(view.filter.id):view.filter.type==="sub"?subName(view.filter.id):(byId(S.cats,view.filter.id)||{}).name):""}</span><b class="num">${money(spendTot)}</b></div>
+      <div class="legend" style="margin-top:9px"><span>${items.length} ${q?"match"+(items.length===1?"":"es"):"entr"+(items.length===1?"y":"ies")}${kindLbl?" · "+kindLbl:""}${scope?" · "+scope:""}${[view.fCat?(view.fCat.type==="sub"?subName(view.fCat.id):(byId(S.cats,view.fCat.id)||{}).name):"",view.fRet?"at "+retName(view.fRet):"",view.fCard?"paid with "+cardName(view.fCard):""].filter(Boolean).map(x=>" · "+esc(x)).join("")}</span><b class="num">${money(spendTot)}</b></div>
     </div>`;
   if(!items.length){
     $("#p-log").innerHTML=head+`<div class="card flush"><div class="empty">
@@ -1477,7 +1503,7 @@ function renderLog(){
     let sub;
     if(kind==="tx"){const bits=[subName(r.s)];const rt=retName(r.r);if(rt)bits.push(rt);const k2=cardName(r.k);if(k2)bits.push(k2);
       sub=(r.p?"Not cleared yet · ":"")+bits.join(" · ");}
-    else sub=kind==="inc"?"Income":"Savings";
+    else sub=(kind==="inc"?"Income":(r.a<0?"Taken out of savings":"Into savings"))+(r.p?" · not landed yet":"");
     html+=`<button class="row" data-edit="${r.id}" data-kind="${kind}"><div class="main"><b>${r.p?'<i class="pendot"></i>':""}${esc(r.n||"—")}</b><span>${esc(sub)}</span></div>${amt(r,kind)}</button>`;
   }
   html+=`</div>${sorted.length<items.length?`<div class="card"><div class="hint" style="margin:0">Showing the first 300 of ${items.length}.</div></div>`:""}`;
@@ -1557,20 +1583,30 @@ function setMode(m){
   $("#mIncome").classList.toggle("on",m==="income");
   $("#mSave").classList.toggle("on",m==="save");
   $("#lblAmount").textContent=m==="save"?(view.wdraw?"Amount to take out":"Amount to put away"):m==="income"?"Amount":view.refund?"Refund amount":"Price";
-  $("#lblName").textContent=m==="spend"?"Item name":m==="income"?"From":view.wdraw?"Taken from":"Moved to";
+  $("#lblName").textContent=m==="spend"?"Item name":m==="income"?"From":"Note (optional)";
   $("#fName").placeholder=m==="spend"?"e.g. Bounty Hunter Funko":m==="income"?"e.g. Raytheon":"e.g. Apple Savings";
   for(const el of ["wCat","wRet","wCard"]) $("#"+el).style.display=m==="spend"?"":"none";
+  $("#wSavAcct").style.display=m==="save"?"":"none";
+  $("#lblSavAcct").textContent=view.wdraw?"Take it out of":"Put it into";
+  $("#wCatCard").style.display=m==="spend"?"":"none";
   $("#tRefund").style.display=m==="spend"?"":"none";
-  $("#tPending").style.display=m==="spend"?"":"none";
+  $("#tPending").style.display=(m==="spend"||m==="save")?"":"none";
   $("#tWithdraw").style.display=m==="save"?"":"none";
   $("#tWithdraw").classList.toggle("on",!!view.wdraw);
   $("#tPending").classList.toggle("on",!!view.pend);
+  if(typeof syncPendChip==="function")syncPendChip();
   $("#tRefund").classList.toggle("on",!!view.refund);
   $("#openFavs").style.display=m==="spend"?"":"none";
   $("#favThis").style.display=m==="spend"?"":"none";
   syncSaveLabel();
 }
 $("#tPending").onclick=()=>{view.pend=!view.pend;setMode(view.mode);};
+function syncPendChip(){
+  const m=view.mode;
+  $("#tPending").textContent=m==="save"
+    ? (view.pend?"⏳ Transfer not landed":"✓ Transfer landed")
+    : (view.pend?"⏳ Hasn't cleared yet":"✓ Already cleared");
+}
 $("#favThis").onclick=()=>{view.favThis=!view.favThis;$("#favThis").classList.toggle("on",!!view.favThis);
   $("#favThis").textContent=view.favThis?"♥":"♡";toast(view.favThis?"Will be saved as a favourite":"Won't be saved as a favourite");};
 $("#openFavs").onclick=()=>openFavs();
@@ -1622,8 +1658,15 @@ $("#saveEntry").onclick=()=>{
     S.tx.push(rec);
     if(view.favThis){addFav(rec);view.favThis=false;$("#favThis").classList.remove("on");$("#favThis").textContent="♡";}
   } else if(view.mode==="income") S.inc.push({id:uid("i"),ts:Date.now(),d:view.date,n:n||"Income",a:+a.toFixed(2),y});
-  else S.sav.push({id:uid("v"),ts:Date.now(),d:view.date,n:n||(view.wdraw?"Withdrawal":"Savings"),
-                   a:+((view.wdraw?-a:a).toFixed(2)),y});
+  else {
+    const acct=(cSav&&cSav.text)||"";
+    const rec={id:uid("v"),ts:Date.now(),d:view.date,
+               n:acct||n||(view.wdraw?"Withdrawal":"Savings"),
+               a:+((view.wdraw?-a:a).toFixed(2)),y};
+    if(n&&acct)rec.note=n;
+    if(view.pend)rec.p=1;
+    S.sav.push(rec);
+  }
   save();$("#fAmount").value="";$("#fName").value="";
   view.cycle=y;
   toast(view.mode==="spend"&&view.refund?"Refund of "+money(a)+" logged"
@@ -2038,7 +2081,7 @@ document.addEventListener("click",e=>{
   if(t.closest("[data-close]"))return closeSheet();
   const ed=t.closest("[data-edit]");if(ed)return openEdit(ed.dataset.edit,ed.dataset.kind);
   const ln=t.closest("[data-line]");if(ln)return openLine(ln.dataset.line);
-  const lo=t.closest("[data-loose]");if(lo){view.filter=null;setTab("log");return;}
+  const lo=t.closest("[data-loose]");if(lo){view.fCard=null;view.fCat=null;view.fRet=null;setTab("log");return;}
   const li=t.closest("[data-list]");if(li)return openList(li.dataset.list);
   const it=t.closest("[data-item]");if(it){const[k,i]=it.dataset.item.split(":");return openItem(k,i);}
   const ad=t.closest("[data-add]");if(ad){const k=ad.dataset.add;return k==="line"?openLineEdit(null):openItem(k==="cat"?"cat":k,null);}
@@ -2049,7 +2092,7 @@ document.addEventListener("click",e=>{
   const so=t.closest("[data-sort]");if(so){view.byAdded=so.dataset.sort==="added";render();openFilters();return;}
   const fl=t.closest("[data-filter]");
   if(fl){const v=fl.dataset.filter;
-    view.filter=v?{type:v.split(":")[0],id:v.split(":")[1]}:null;render();openFilters();return;}
+    view.fCard=v?v.split(":")[1]:null;render();openFilters();return;}
   const ps=t.closest("[data-pullsav]");if(ps)return openPullSav(ps.dataset.pullsav);
   const cvw=t.closest("[data-cyview]");if(cvw){view.cyView=cvw.dataset.cyview;renderPlan();return;}
   const jp=t.closest("[data-jump]");if(jp){const el=document.getElementById(jp.dataset.jump);
@@ -2075,6 +2118,7 @@ document.addEventListener("click",e=>{
     view.pick=view.pick===i?null:i;renderHistory();return;}
   const ct=t.closest("[data-cat]");if(ct){
     view.openCat=view.openCat===ct.dataset.cat?null:ct.dataset.cat;renderHistory();return;}
+  const k2=t.closest("[data-kind2]");if(k2){view.kind=k2.dataset.kind2;render();openFilters();return;}
   const pb=t.closest("[data-pendby]");if(pb){view.pendBy=pb.dataset.pendby;renderPending();return;}
   const ca=t.closest("[data-clearall]");if(ca){
     const raw=ca.dataset.clearall,mode=raw.slice(0,raw.indexOf(":")),key=raw.slice(raw.indexOf(":")+1);
@@ -2100,7 +2144,7 @@ document.addEventListener("click",e=>{
     case "logQx":view.q="";renderLog();return;
     case "openFilters":openFilters();return;
     case "setupFavs":openFavs();return;
-    case "clearFilters":view.range="cycle";view.filter=null;view.byAdded=false;view.rangeTouched=0;closeSheet();render();return;
+    case "clearFilters":view.range="cycle";view.fCard=null;view.fCat=null;view.fRet=null;view.byAdded=false;view.kind="tx";view.rangeTouched=0;closeSheet();render();return;
     case "openSetup":setTab("setup");return;
     case "backBtn":setTab(view.from||"stats");return;
     case "clearAll":
