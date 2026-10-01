@@ -381,6 +381,9 @@ const isoOf=d=>d.getFullYear()+"-"+p2(d.getMonth()+1)+"-"+p2(d.getDate());
 const dOf=s=>{const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d);};
 const addDays=(s,n)=>{const d=dOf(s);d.setDate(d.getDate()+n);return isoOf(d);};
 const between=(a,b)=>Math.round((dOf(a)-dOf(b))/DAY);
+/* cycles are 28 days as a rule, but a few imported from the sheet are not.
+   measure the one in hand rather than assuming. */
+const cycLen=c=>between(c.e,c.s)+1;
 const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const WD=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const fmtShort=s=>{const d=dOf(s);return d.getDate()+" "+MON[d.getMonth()];};
@@ -647,13 +650,29 @@ function planTotals(i){
   }
   return {alloc,spent};
 }
+/* what cycles BEFORE i still have in flight. their pending charges have not
+   left checking yet and their pending income has not landed, so today's bank
+   balance is flattering by exactly this much. positive = still owed out. */
+function owedFromEarlier(i){
+  let v=0;
+  for(const t of S.tx ) if(t.p&&t.y<i) v+=t.a;
+  for(const x of S.inc) if(x.p&&x.y<i) v-=x.a;
+  for(const s of S.sav) if(s.p&&s.y<i) v+=s.a;
+  return cents(v);
+}
+/* what was actually yours to spend when cycle i began: today's cleared balance,
+   wound back past everything cleared that is dated in cycle i or later, then
+   less whatever older cycles still have in flight. subtracting that last part
+   up front is what keeps the figure still — before, an old charge landing in
+   the middle of a new cycle silently moved this number. */
 function openingBal(i){
   const ov=(S.carry&&S.carry.set)||{};
   if(ov[String(i)]!=null)return ov[String(i)];
-  return +(bankBal()
-    - sumOf(incIn(i))
-    + txIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0)
-    + savIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0)).toFixed(2);
+  let since=0;
+  for(const t of S.tx ) if(!t.p&&t.y>=i) since-=t.a;
+  for(const x of S.inc) if(!x.p&&x.y>=i) since+=x.a;
+  for(const s of S.sav) if(!s.p&&s.y>=i) since-=s.a;
+  return cents(bankBal()-since-owedFromEarlier(i));
 }
 function carriedInto(i){
   const c=S.carry||{},ov=c.set||{};
@@ -708,7 +727,11 @@ function openCarry(i){
       <div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
         <input class="num" id="kA" type="text" inputmode="decimal" value="${fixed?ov[String(i)]:""}" placeholder="0.00"></div></label>
     <div class="hint">${fixed?"You set this by hand. Worked out from your entries it would be "+money(auto)+"."
-      :"Worked out from your entries: "+money(auto)+". That's every cycle's leftover, added up."}
+      :"Worked out from your entries: "+money(auto)+"."}
+      ${(()=>{const ow=owedFromEarlier(i);
+        return ow>0.005?"That's what was in checking on the "+fmtShort(cyc(i).s)+", less the "+money(ow)+" of earlier charges that hadn't come out yet — so it won't shift when they land."
+          : ow<-0.005?"That's what was in checking on the "+fmtShort(cyc(i).s)+", plus "+money(-ow)+" still due in from an earlier cycle."
+          : "That's what was in checking when the cycle began.";})()}
       Change it only if the real balance differs from what the app has.</div>
     <button class="btn" id="kSave">Use this figure</button>
     <button class="btn sm ghost" id="kZero">Treat this cycle as starting from zero</button>
@@ -1124,13 +1147,13 @@ function renderHome(){
   const ci=nowCycle(),c=cyc(ci),cSpend=sumOf(txIn(ci)),cInc=sumOf(incIn(ci)),cSav=sumOf(savIn(ci));
   const cBud=Object.values(S.budgets[String(ci)]||{}).reduce((a,v)=>a+v,0);
   const cLeft=cents(cBud-cSpend),cPend=sumOf(txIn(ci).filter(t=>t.p));
-  const today=todayIso();let el=today<c.s?0:today>c.e?28:between(today,c.s)+1;
+  const today=todayIso(),cN=cycLen(c);let el=today<c.s?0:today>c.e?cN:between(today,c.s)+1;
   const pct=cBud>0?Math.min(100,cSpend/cBud*100):(cSpend>0?100:0);
   const thisCycle=`<div class="card" style="padding:15px 16px">
-      <div class="legend"><span>This cycle · ${fmtShort(c.s)} – ${fmtShort(c.e)} · day ${el} of 28</span>
+      <div class="legend"><span>This cycle · ${fmtShort(c.s)} – ${fmtShort(c.e)} · day ${el} of ${cN}</span>
         <button class="chip" data-tabjump="plan" style="padding:4px 12px;min-height:30px">Open</button></div>
       <div class="bar ${cLeft<0?"over":""}" style="margin:12px 0 6px"><div class="fill" style="width:${pct}%"></div>
-        ${el>0&&el<28?`<div class="pace" style="left:${el/28*100}%"></div>`:""}</div>
+        ${el>0&&el<cN?`<div class="pace" style="left:${el/cN*100}%"></div>`:""}</div>
       <div class="legend num"><span>${money(cSpend)} of ${money(cBud)} planned</span>
         <b style="${cLeft<0?"color:var(--over)":cLeft>0?"color:var(--good)":""}">${money(Math.abs(cLeft))} ${cLeft<0?"over budget":cLeft>0?"left in budget":"budget fully spent"}</b></div>
       <div class="stats">
@@ -1333,8 +1356,8 @@ function renderPlan(){
   const budget=rows.reduce((a,r)=>a+r.bud,0),planSpent=rows.reduce((a,r)=>a+r.spent,0);
   const left=cents(budget-planSpent);
   const pct=budget>0?Math.min(100,planSpent/budget*100):(planSpent>0?100:0);
-  const today=todayIso();let el=today<c.s?0:today>c.e?28:between(today,c.s)+1;
-  const daysLeft=Math.max(0,28-el);
+  const today=todayIso(),cN=cycLen(c);let el=today<c.s?0:today>c.e?cN:between(today,c.s)+1;
+  const daysLeft=Math.max(0,cN-el);
   const alloc=cents(budget);
   const gotIn=sumOf(incClearedIn(i)),pendIn=sumOf(incPendingIn(i));
   const toCome=toComeIn(i),expIn=cents(gotIn+pendIn+toCome);
@@ -1356,8 +1379,8 @@ function renderPlan(){
       <div class="meter-amt num ${left<0?"over":left>0?"good":""}">${money(Math.abs(left))}</div>
       <div class="meter-sub num">${money(planSpent)} of ${money(budget)} allocated</div>
       <div class="bar ${left<0?"over":""}"><div class="fill" style="width:${pct}%"></div>
-        ${el>0&&el<28?`<div class="pace" style="left:${el/28*100}%"></div>`:""}</div>
-      <div class="legend"><span>Day ${el} of 28 · ${daysLeft} left</span>
+        ${el>0&&el<cN?`<div class="pace" style="left:${el/cN*100}%"></div>`:""}</div>
+      <div class="legend"><span>Day ${el} of ${cN} · ${daysLeft} left</span>
         <span style="${gap<0?"color:var(--over)":"color:var(--good)"}">${gap<0?money(Math.abs(gap))+" more than you'll have":money(gap)+" spare vs money coming"}</span></div>
     </div>`;
     const line=r=>{
@@ -1435,7 +1458,12 @@ function renderPlan(){
     </div>
     <div class="card flush">
       <div class="daylabel" style="border-top:none">Where that ${money(cover)} comes from</div>
-      ${ln("Left over when the cycle began",opening,"what was in checking on "+fmtShort(c.s)+" · tap to adjust",null,`data-carry="${i}"`)}
+      ${ln("Left over when the cycle began",opening,
+        (()=>{const ow=owedFromEarlier(i);
+          return ow>0.005?"in checking on "+fmtShort(c.s)+", less "+money(ow)+" the cycle before still owed"
+            : ow<-0.005?"in checking on "+fmtShort(c.s)+", plus "+money(-ow)+" still due in from before"
+            : "what was in checking on "+fmtShort(c.s)+" · tap to adjust";})(),
+        null,`data-carry="${i}"`)}
       ${ln("Income received",gotIn,null,"in")}
       ${pendIn?ln("Income on the way",pendIn,"already scheduled","in"):""}
       ${ln("Still expected in",toCome,
