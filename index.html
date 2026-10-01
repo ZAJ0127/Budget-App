@@ -695,9 +695,7 @@ function openPullSav(want){
         <input class="num" id="wA" type="text" inputmode="decimal" value="${want||""}" placeholder="0.00"></div></label>
     <label class="f"><span>Out of</span><div id="wFrom"></div></label>
     <label class="f"><span>Date</span><input class="inp num" id="wD" type="date" value="${todayIso()}"></label>
-    <div class="hint">It sits in Pending until the transfer actually lands. Your savings balance and checking
-      both stay put until you tick it off, but the plan counts on it straight away — it comes off the
-      Savings line's budget, so the money shows up once, as less saved.</div>
+    <div class="hint">Sits in Pending until the transfer lands. The plan counts on it straight away.</div>
     <button class="btn" id="wGo" style="background:var(--save)">Request the transfer</button>`);
   const accs=()=>S.accounts.filter(a=>a.type==="linked"||a.type==="savings").map(a=>({id:a.id,name:a.name}));
   const wFrom=combo($("#wFrom"),accs,{value:(accs()[0]||{}).id});
@@ -726,13 +724,9 @@ function openCarry(i){
     <label class="f"><span>What was sitting in checking when this cycle began</span>
       <div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
         <input class="num" id="kA" type="text" inputmode="decimal" value="${fixed?ov[String(i)]:""}" placeholder="0.00"></div></label>
-    <div class="hint">${fixed?"You set this by hand. Worked out from your entries it would be "+money(auto)+"."
+    <div class="hint">${fixed?"You set this by hand. Worked out it would be "+money(auto)+"."
       :"Worked out from your entries: "+money(auto)+"."}
-      ${(()=>{const ow=owedFromEarlier(i);
-        return ow>0.005?"That's what was in checking on the "+fmtShort(cyc(i).s)+", less the "+money(ow)+" of earlier charges that hadn't come out yet — so it won't shift when they land."
-          : ow<-0.005?"That's what was in checking on the "+fmtShort(cyc(i).s)+", plus "+money(-ow)+" still due in from an earlier cycle."
-          : "That's what was in checking when the cycle began.";})()}
-      Change it only if the real balance differs from what the app has.</div>
+      Change it only if your real balance differs.</div>
     <button class="btn" id="kSave">Use this figure</button>
     <button class="btn sm ghost" id="kZero">Treat this cycle as starting from zero</button>
     ${fixed?`<button class="btn sm ghost" id="kAuto">Go back to working it out</button>`:""}`);
@@ -1013,9 +1007,7 @@ function renderRecurPage(kind){
     <div class="card flush">${rows||`<div class="empty"><b>${cp.empty}</b>${cp.blurb}</div>`}</div>
     ${due.length?`<div class="card"><div class="legend"><span>${due.length} due this cycle</span><b class="num">${money(due.reduce((a,r)=>a+ +r.a,0))}</b></div></div>`:""}
     <div class="card">
-      <div class="hint" style="margin:0 0 8px">On its due date each one adds itself to Pending — tick it off there when the charge lands.
-        A new ${cp.singular} won't charge for a date in the past unless you set one; open any ${cp.singular} and use
-        <b>Charge it now</b> if you've just been billed.</div>
+      <div class="hint" style="margin:0 0 8px">Each one adds itself to Pending on its due date.</div>
       <button class="btn sm ghost" data-recur="new:${kind}">Add a ${cp.singular}</button>
     </div>`;
 }
@@ -1412,7 +1404,7 @@ function renderPlan(){
       ${left!==0&&rows.some(r=>r.bud||r.spent)
         ? `<button class="btn sm ghost" data-matchall="${i}">Match the plan to what's spent — ${left>0?"drops":"raises"} it by ${money(Math.abs(left))}</button>`
         : ``}
-      <div class="hint" style="margin:0">Tap a line to set its budget. Fixed lines are bills that don't change much — mark any line fixed or flexible under the gear → Plan lines.</div></div>`;
+      <div class="hint" style="margin:0">Tap a line to set its budget.</div></div>`;
     $("#p-plan").innerHTML=seg+hero+list;return;
   }
 
@@ -1460,8 +1452,8 @@ function renderPlan(){
       <div class="daylabel" style="border-top:none">Where that ${money(cover)} comes from</div>
       ${ln("Left over when the cycle began",opening,
         (()=>{const ow=owedFromEarlier(i);
-          return ow>0.005?"in checking on "+fmtShort(c.s)+", less "+money(ow)+" the cycle before still owed"
-            : ow<-0.005?"in checking on "+fmtShort(c.s)+", plus "+money(-ow)+" still due in from before"
+          return ow>0.005?"on "+fmtShort(c.s)+", less what the last cycle still owed"
+            : ow<-0.005?"on "+fmtShort(c.s)+", plus what's still due in"
             : "what was in checking on "+fmtShort(c.s)+" · tap to adjust";})(),
         null,`data-carry="${i}"`)}
       ${ln("Income received",gotIn,null,"in")}
@@ -1674,7 +1666,7 @@ function renderSetup(){
     <label class="f"><span>Warn me if checking would drop below</span>
       <div class="money-in sm"><i>${esc(s.symbol)}</i>
         <input class="num" id="setFloor" type="text" inputmode="decimal" value="${s.floor||""}" placeholder="0.00"></div>
-      <div class="hint">Counts pending charges as already gone. Set 0 to be warned only about going negative.</div></label>
+      <div class="hint">Pending charges count as already gone. 0 warns only on going negative.</div></label>
     <button class="btn sm" id="saveSettings">Save settings</button>
   </div>
   <div class="card">
@@ -1948,7 +1940,7 @@ function openLine(lid){
     <div class="card" style="margin-top:14px"><div class="legend"><span>Spent so far</span><b class="num">${money(row.spent)}</b></div>
       <div class="legend" style="margin-top:6px"><span>${row.rem<0?"Over by":row.rem>0?"Remaining":"Nothing left"}</span><b class="num" style="${row.rem<0?'color:var(--over)':row.rem>0?'color:var(--good)':''}">${money(Math.abs(row.rem))}</b></div></div>
     <div class="hint" style="margin-top:12px">Counts: ${esc(covers)}</div>
-    ${isSav?`<div class="hint" style="margin-top:8px">Pick <b>Out of savings</b> to plan a withdrawal. It's counted here only — as less saved — so it won't also show up as spare money.</div>`:""}
+    ${isSav?`<div class="hint" style="margin-top:8px">Pick <b>Out of savings</b> to plan a withdrawal.</div>`:""}
     <button class="btn" id="lSave">Save budget</button>
     ${row.spent||row.bud?`<button class="btn sm ghost" id="lMatch">Match what's spent · ${money(row.spent)}</button>`:""}
     <button class="btn sm ghost" id="lUseAll">Use all ${money(Math.max(0,freeToAllocate))}</button>
@@ -2017,7 +2009,7 @@ function openAccount(id){
     const t=$("#aT").value;
     $("#aLbl").textContent=(t==="manual"||t==="savings")?"Balance":"Adjustment";
     $("#aHint").textContent=
-      t==="bank"?"Every income entry, less every cleared purchase, less what's sitting in your savings accounts. Use the adjustment to true it up to what your bank actually shows."
+      t==="bank"?"Every income entry, less every cleared purchase, less what's in your savings accounts."
      :t==="pending"?"Mirrors whatever is sitting on the Pending tab."
      :t==="linked"?"Adds up all "+S.sav.length+" savings transfers you've logged. The adjustment is the balance before the first one."
      :t==="savings"?"A savings figure you keep up to date. Counts toward total savings and comes off checking."
@@ -2133,9 +2125,7 @@ function openItem(kind,id){
     const targets=S.cats.filter(c=>c.id!==it.id).map(c=>({id:c.id,name:c.name,sub:(byId(S.groups,c.g)||{}).name}));
     const mySubs=subsOfCat(it.id);
     openSheet(`<div class="sheethead"><h3>Move “${esc(it.name)}”</h3><button class="close" data-close>×</button></div>
-      <div class="hint" style="margin:10px 0 0">Categories can't nest inside each other — only sub-categories can.
-        So moving “${esc(it.name)}” into another category turns ${mySubs.length?"its "+mySubs.length+" sub-categor"+(mySubs.length===1?"y":"ies"):"it"} into
-        sub-categor${mySubs.length===1?"y":"ies"} there, and “${esc(it.name)}” itself goes away.</div>
+      <div class="hint" style="margin:10px 0 0">${mySubs.length?"Its "+mySubs.length+" sub-categor"+(mySubs.length===1?"y":"ies")+" move across. ":""}“${esc(it.name)}” itself goes away.</div>
       <div class="f"><span>Move into</span><div id="mergeTo"></div></div>
       <button class="btn" id="mergeGo">Move it</button>`);
     const mv=combo($("#mergeTo"),()=>targets,{placeholder:"Type or pick a category"});
