@@ -1250,6 +1250,23 @@ function renderPending(){
     <div class="card"><button class="btn sm ghost" id="clearAll">Mark everything as cleared</button></div>`;
 }
 
+/* set every active line's budget to what it has actually spent, so the plan
+   has nothing left over and nothing over plan. undoable in one tap. */
+function matchPlanToSpent(i){
+  const {rows}=planFor(i);
+  const active=rows.filter(r=>r.bud||r.spent);
+  if(!active.length){toast("Nothing logged in this cycle yet");return;}
+  const b=S.budgets[String(i)]||(S.budgets[String(i)]={});
+  const before=Object.assign({},b);
+  let n=0;
+  for(const r of active){const v=cents(r.spent);
+    if(cents(b[r.line.id]||0)!==v){b[r.line.id]=v;n++;}}
+  if(!n){toast("The plan already matches what's spent");return;}
+  save();render();
+  undoToast("Matched "+n+" line"+(n===1?"":"s")+" to what's spent",()=>{
+    S.budgets[String(i)]=before;save();render();});
+}
+
 const FIXED_DEFAULT=new Set(["Car Payment","Loan Payment","Phone Bill","Electric Bill","Insurance","Subscriptions","Rent"]);
 const isFixed=l=>l.fixed!=null?!!l.fixed:FIXED_DEFAULT.has(l.name);
 
@@ -1315,7 +1332,11 @@ function renderPlan(){
       ${loose.length?`<button class="planline" data-loose="1"><div class="pl"><b>Not in the plan</b><span>${loose.length} entries with no matching line</span></div>
         <div class="pr num">${money(sumOf(loose))}</div></button>`:""}
     </div>
-    <div class="card"><div class="hint" style="margin:0">Tap a line to set its budget. Fixed lines are bills that don't change much — mark any line fixed or flexible under the gear → Plan lines.</div></div>`;
+    <div class="card">
+      ${left!==0&&rows.some(r=>r.bud||r.spent)
+        ? `<button class="btn sm ghost" data-matchall="${i}">Match the plan to what's spent — ${left>0?"drops":"raises"} it by ${money(Math.abs(left))}</button>`
+        : ``}
+      <div class="hint" style="margin:0">Tap a line to set its budget. Fixed lines are bills that don't change much — mark any line fixed or flexible under the gear → Plan lines.</div></div>`;
     $("#p-plan").innerHTML=seg+hero+list;return;
   }
 
@@ -1842,6 +1863,7 @@ function openLine(lid){
     <div class="hint" style="margin-top:12px">Counts: ${esc(covers)}</div>
     ${isSav?`<div class="hint" style="margin-top:8px">Pick <b>Out of savings</b> to plan a withdrawal. It's counted here only — as less saved — so it won't also show up as spare money.</div>`:""}
     <button class="btn" id="lSave">Save budget</button>
+    ${row.spent||row.bud?`<button class="btn sm ghost" id="lMatch">Match what's spent · ${money(row.spent)}</button>`:""}
     <button class="btn sm ghost" id="lUseAll">Use all ${money(Math.max(0,freeToAllocate))}</button>
     <button class="btn sm ghost" id="lAll">Use this amount for every later cycle</button>`);
   const val=()=>{const v=num($("#lB").value);
@@ -1870,6 +1892,16 @@ function openLine(lid){
     if(isSav){savDir=1;const seg=$("#lDir");
       for(const x of seg.querySelectorAll("button"))x.classList.toggle("on",x.dataset.savdir==="in");}
     syncHint();};
+  const mb=$("#lMatch");
+  if(mb)mb.onclick=()=>{
+    /* snap this line's budget to what it has actually spent, so it has
+       nothing left over and nothing over plan. */
+    $("#lB").value=row.spent?Math.abs(row.spent).toFixed(2):"";
+    if(isSav){savDir=row.spent<0?-1:1;const seg=$("#lDir");
+      for(const x of seg.querySelectorAll("button"))
+        x.classList.toggle("on",(x.dataset.savdir==="out")===(savDir<0));}
+    syncHint();
+  };
   $("#lSave").onclick=()=>{b[lid]=val();save();closeSheet();render();toast("Budget saved");};
   $("#lAll").onclick=()=>{const v=val();
     for(let k=i;k<S.cycles.length;k++){S.budgets[String(k)]=S.budgets[String(k)]||{};S.budgets[String(k)][lid]=v;}
@@ -2137,6 +2169,7 @@ document.addEventListener("click",e=>{
   const fo=t.closest("[data-fold]");if(fo){const k=fo.dataset.fold;
     if(k==="acc")view.accOpen=!view.accOpen;else view.folds=Object.assign({},view.folds,{[k]:!(view.folds||{})[k]});
     render();return;}
+  const ma=t.closest("[data-matchall]");if(ma)return matchPlanToSpent(+ma.dataset.matchall);
   const kc=t.closest("[data-carry]");if(kc)return openCarry(+kc.dataset.carry);
   const xp=t.closest("[data-expect]");if(xp)return openExpected(+xp.dataset.expect);
   const rc=t.closest("[data-recur]");if(rc){
