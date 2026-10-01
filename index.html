@@ -662,7 +662,8 @@ function openPullSav(want){
     <label class="f"><span>Out of</span><div id="wFrom"></div></label>
     <label class="f"><span>Date</span><input class="inp num" id="wD" type="date" value="${todayIso()}"></label>
     <div class="hint">It sits in Pending until the transfer actually lands. Your savings balance and checking
-      both stay put until you tick it off, but the plan counts on it straight away.</div>
+      both stay put until you tick it off, but the plan counts on it straight away — it comes off the
+      Savings line's budget, so the money shows up once, as less saved.</div>
     <button class="btn" id="wGo" style="background:var(--save)">Request the transfer</button>`);
   const accs=()=>S.accounts.filter(a=>a.type==="linked"||a.type==="savings").map(a=>({id:a.id,name:a.name}));
   const wFrom=combo($("#wFrom"),accs,{value:(accs()[0]||{}).id});
@@ -672,7 +673,14 @@ function openPullSav(want){
     if(v>avail+0.005&&!confirm("That is more than the "+money(avail)+" you have saved. Carry on?"))return;
     const d=$("#wD").value||todayIso();
     const from=byId(S.accounts,wFrom.id);
-    S.sav.push({id:uid("v"),ts:Date.now(),d,n:"From "+((from||{}).name||"savings"),a:-Math.abs(+v.toFixed(2)),y:cycleFor(d),p:1});
+    const amt=Math.abs(+v.toFixed(2)),y=cycleFor(d);
+    S.sav.push({id:uid("v"),ts:Date.now(),d,n:"From "+((from||{}).name||"savings"),a:-amt,y,p:1});
+    /* a withdrawal is counted once, as a negative budget on the Savings line.
+       cover no longer adds it separately, so take it off the line here or the
+       plan would never see the money. */
+    const savLine=S.lines.find(l=>l.kind==="savings");
+    if(savLine){const b=S.budgets[String(y)]||(S.budgets[String(y)]={});
+      b[savLine.id]=cents((b[savLine.id]||0)-amt);}
     save();closeSheet();setTab("pending");toast(money(v)+" requested — sitting in Pending");};
 }
 function openCarry(i){
@@ -1265,8 +1273,11 @@ function renderPlan(){
   const savedOut=savIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const pendOut=openBalance(),pre=preorders();
   /* the pot the plan draws on: what you started with plus everything coming in.
-     spending is NOT subtracted here — the plan lines already measure it. */
-  const cover=cents(opening+gotIn+pendIn+toCome+fromSav-pre),gap=cents(cover-alloc);
+     spending is NOT subtracted here — the plan lines already measure it.
+     money pulled out of savings is NOT added here either — a withdrawal is a
+     negative budget on the Savings line, so it already lifts (cover - alloc).
+     adding it twice was the old bug. */
+  const cover=cents(opening+gotIn+pendIn+toCome-pre),gap=cents(cover-alloc);
   const onHand=freeToSpend();
 
   if(cv==="plan"){
@@ -1354,7 +1365,6 @@ function renderPlan(){
       ${ln("Income received",gotIn,null,"in")}
       ${pendIn?ln("Income on the way",pendIn,"already scheduled","in"):""}
       ${ln("Still expected in",toCome,"tap to change what you expect this cycle","in",`data-expect="${i}"`)}
-      ${fromSav?ln("Coming out of savings",fromSav,null,"sv"):""}
       ${pre?ln("Preorders",-pre):""}
       <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>To cover the plan</b></div><div class="amt num">${money(cover)}</div></div>
     </div>
@@ -1363,6 +1373,7 @@ function renderPlan(){
       ${ln("Spent",-spentClear)}
       ${pendOut?ln("Charges not cleared",-pendOut,null,"over"):""}
       ${savedOut?ln("Put into savings",-savedOut,null,"sv"):""}
+      ${fromSav?ln("Coming out of savings",fromSav,"counted on the Savings plan line, not as extra cover","sv"):""}
       <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>Free to spend right now</b>
         <span>checking less pending</span></div><div class="amt num ${onHand<0?"over":onHand>0?"good":""}">${money(onHand)}</div></div>
     </div>
@@ -1803,9 +1814,12 @@ function openLine(lid){
   const opening=openingBal(i);
   const gotIn=sumOf(incClearedIn(i)),pendIn=sumOf(incPendingIn(i));
   const expIn=expectedIn(i),toCome=cents(Math.max(0,expIn-gotIn-pendIn));
-  const cover=cents(opening+gotIn+pendIn+toCome+savIncoming()-preorders());
+  /* savings withdrawals are not added here — see the note in renderPlan */
+  const cover=cents(opening+gotIn+pendIn+toCome-preorders());
   const allocOther=cents(rows.reduce((a,r)=>a+r.bud,0)-row.bud);
   const freeToAllocate=cents(cover-allocOther);
+  const isSav=l.kind==="savings";
+  let savDir=row.bud<0?-1:1;
   openSheet(`<div class="sheethead"><h3>${esc(l.name)}</h3>
     <span class="hint" style="margin:0">${fmtShort(cyc(i).s)} – ${fmtShort(cyc(i).e)}</span>
     <button class="close" data-close>×</button></div>
@@ -1817,16 +1831,23 @@ function openLine(lid){
       <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>Available for this line</b></div>
         <div class="amt num ${freeToAllocate<0?"over":freeToAllocate>0?"good":""}">${money(freeToAllocate)}</div></div>
     </div>
+    ${isSav?`<div class="seg" id="lDir" style="margin-top:14px">
+      <button class="${savDir<0?"":"on"}" data-savdir="in">Into savings</button>
+      <button class="${savDir<0?"on":""}" data-savdir="out">Out of savings</button></div>`:""}
     <label class="f"><span>Budget for this cycle</span>
-      <div class="money-in sm"><i>${esc(S.settings.symbol)}</i><input class="num" id="lB" type="text" inputmode="decimal" value="${row.bud||""}" placeholder="0.00"></div>
+      <div class="money-in sm"><i>${esc(S.settings.symbol)}</i><input class="num" id="lB" type="text" inputmode="decimal" value="${row.bud?Math.abs(row.bud):""}" placeholder="0.00"></div>
       <div class="hint" id="lHint"></div></label>
     <div class="card" style="margin-top:14px"><div class="legend"><span>Spent so far</span><b class="num">${money(row.spent)}</b></div>
       <div class="legend" style="margin-top:6px"><span>${row.rem<0?"Over by":row.rem>0?"Remaining":"Nothing left"}</span><b class="num" style="${row.rem<0?'color:var(--over)':row.rem>0?'color:var(--good)':''}">${money(Math.abs(row.rem))}</b></div></div>
     <div class="hint" style="margin-top:12px">Counts: ${esc(covers)}</div>
+    ${isSav?`<div class="hint" style="margin-top:8px">Pick <b>Out of savings</b> to plan a withdrawal. It's counted here only — as less saved — so it won't also show up as spare money.</div>`:""}
     <button class="btn" id="lSave">Save budget</button>
     <button class="btn sm ghost" id="lUseAll">Use all ${money(Math.max(0,freeToAllocate))}</button>
     <button class="btn sm ghost" id="lAll">Use this amount for every later cycle</button>`);
-  const val=()=>{const v=num($("#lB").value);return isFinite(v)&&v>0?+v.toFixed(2):0;};
+  const val=()=>{const v=num($("#lB").value);
+    if(!isFinite(v)||Math.abs(v)<=0)return 0;
+    const a=+Math.abs(v).toFixed(2);
+    return isSav?a*savDir:a;};
   function syncHint(){
     const left=cents(freeToAllocate-val());
     $("#lHint").textContent=left<0
@@ -1834,8 +1855,21 @@ function openLine(lid){
       : left>0 ? money(left)+" would still be unallocated" : "allocates the cycle to the penny";
     $("#lHint").classList.toggle("warn",left<0);
   }
+  if(isSav){
+    const seg=$("#lDir");
+    seg.addEventListener("click",e=>{
+      const b=e.target.closest("[data-savdir]"); if(!b)return;
+      e.preventDefault(); e.stopPropagation();
+      savDir=b.dataset.savdir==="out"?-1:1;
+      for(const x of seg.querySelectorAll("button"))x.classList.toggle("on",x===b);
+      syncHint();
+    });
+  }
   $("#lB").addEventListener("input",syncHint); syncHint();
-  $("#lUseAll").onclick=()=>{$("#lB").value=Math.max(0,freeToAllocate).toFixed(2);syncHint();};
+  $("#lUseAll").onclick=()=>{$("#lB").value=Math.max(0,freeToAllocate).toFixed(2);
+    if(isSav){savDir=1;const seg=$("#lDir");
+      for(const x of seg.querySelectorAll("button"))x.classList.toggle("on",x.dataset.savdir==="in");}
+    syncHint();};
   $("#lSave").onclick=()=>{b[lid]=val();save();closeSheet();render();toast("Budget saved");};
   $("#lAll").onclick=()=>{const v=val();
     for(let k=i;k<S.cycles.length;k++){S.budgets[String(k)]=S.budgets[String(k)]||{};S.budgets[String(k)][lid]=v;}
