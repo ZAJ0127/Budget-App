@@ -340,6 +340,21 @@ function load(){
     BILLS.forEach(b=>{if(!have.has(b.n+"|bill"))S.recur.push(JSON.parse(JSON.stringify(b)));});
   }
   S.favs=S.favs||[];
+  /* expectV 2: S.expect used to hold the cycle's TOTAL income, and "still to
+     come" was total minus what had already arrived — so a figure below what
+     you'd been paid silently clamped to zero. It now holds what is STILL TO
+     COME directly. Convert in place, preserving the number each cycle was
+     actually showing at the time. */
+  if(S.expect&&(S.expectV||0)<2){
+    const conv={};
+    for(const k in S.expect){
+      const tot=S.expect[k];if(tot==null)continue;
+      const inAlready=(S.inc||[]).filter(x=>x.y===+k).reduce((a,x)=>a+x.a,0);
+      conv[k]=Math.max(0,Math.round((tot-inAlready)*100)/100);
+    }
+    S.expect=conv;
+  }
+  S.expectV=2;
   if(S.settings.floor==null)S.settings.floor=0;
   if(S.settings.statsWin==null)S.settings.statsWin=0;   /* 0 = all time */
   S.carry=Object.assign({on:0,from:null},S.carry||{});
@@ -706,38 +721,76 @@ function openCarry(i){
 }
 
 /* ---------- expected income ---------- */
-function expectedIn(i){
-  if(S.expect&&S.expect[String(i)]!=null)return S.expect[String(i)];
-  const got=sumOf(incClearedIn(i)),pend=sumOf(incPendingIn(i)),sched=scheduledIncome(i);
-  if(pend||sched)return cents(got+pend+sched);
+/* what is STILL TO COME this cycle — not the cycle total. money already
+   received or already pending is counted separately, so this never needs to
+   include it and can never be cancelled out by it. */
+function toComeIn(i){
+  if(S.expect&&S.expect[String(i)]!=null)return cents(S.expect[String(i)]);
+  const sched=scheduledIncome(i);
+  if(sched)return sched;
+  const got=sumOf(incClearedIn(i)),pend=sumOf(incPendingIn(i));
+  if(pend)return 0;                     /* it's already on the books */
   const past=[];
   for(let k=i-1;k>=0&&past.length<3;k--){const v=sumOf(incClearedIn(k));if(v>0)past.push(v);}
-  return past.length?+(past.reduce((a,b)=>a+b,0)/past.length).toFixed(2):0;
+  if(!past.length)return 0;
+  const avg=past.reduce((a,b)=>a+b,0)/past.length;
+  return cents(Math.max(0,avg-got));    /* a typical cycle, less what's in */
 }
+/* the whole cycle's income, for anything that wants the total */
+const expectedIn=i=>cents(sumOf(incClearedIn(i))+sumOf(incPendingIn(i))+toComeIn(i));
 function avgSpend(i,n){
   const past=[];
   for(let k=i-1;k>=0&&past.length<n;k--){if(txIn(k).length)past.push(sumOf(txIn(k)));}
   return past.length?past.reduce((a,b)=>a+b,0)/past.length:0;
 }
 function openExpected(i){
-  const cur=expectedIn(i),set=S.expect&&S.expect[String(i)]!=null;
-  openSheet(`<div class="sheethead"><h3>Expected income</h3>
+  const set=S.expect&&S.expect[String(i)]!=null;
+  const cur=toComeIn(i);
+  const got=sumOf(incClearedIn(i)),pend=sumOf(incPendingIn(i));
+  const sched=scheduledIncome(i);
+  const total=cents(got+pend+cur);
+  openSheet(`<div class="sheethead"><h3>Still to come</h3>
     <span class="hint" style="margin:0">${fmtShort(cyc(i).s)} – ${fmtShort(cyc(i).e)}</span>
     <button class="close" data-close>×</button></div>
-    <label class="f"><span>What you expect to come in this cycle</span>
+    <div class="card flush" style="margin-top:12px">
+      <div class="row" style="padding:9px 15px"><div class="main"><b style="font-weight:480">Already in</b></div>
+        <div class="amt num">${money(got)}</div></div>
+      ${pend?`<div class="row" style="padding:9px 15px"><div class="main"><b style="font-weight:480">On the way</b>
+        <span>scheduled, not landed</span></div><div class="amt num">${money(pend)}</div></div>`:""}
+      <div class="row" style="padding:9px 15px"><div class="main"><b style="font-weight:480">Still to come</b></div>
+        <div class="amt num" id="xRow">${money(cur)}</div></div>
+      <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>Income this cycle</b></div>
+        <div class="amt num" id="xTot">${money(total)}</div></div>
+    </div>
+    <label class="f"><span>What's still to come — don't include what's already in</span>
       <div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
-        <input class="num" id="xA" type="text" inputmode="decimal" value="${cur||""}" placeholder="0.00"></div></label>
-    <div class="hint">${set?"You set this yourself.":"Worked out from your last three cycles. Type a figure to fix it."}
-      So far this cycle: ${money(sumOf(incIn(i)))}.</div>
+        <input class="num" id="xA" type="text" inputmode="decimal" value="${cur||""}" placeholder="0.00"></div>
+      <div class="hint" id="xHint"></div></label>
+    <div class="hint">${set?"You set this yourself."
+      :sched?"Worked out from your income schedule.":"Worked out from your last three cycles."}</div>
     <button class="btn" id="xSave">Save</button>
+    ${sched?`<button class="btn sm ghost" id="xSched">Use the ${money(sched)} your schedule says</button>`:""}
     <button class="btn sm ghost" id="xAll">Use this for every later cycle</button>
-    ${set?`<button class="btn sm ghost" id="xClear">Go back to the running average</button>`:""}`);
+    ${set?`<button class="btn sm ghost" id="xClear">Work it out for me</button>`:""}`);
   const val=()=>{const v=num($("#xA").value);return isFinite(v)&&v>=0?+v.toFixed(2):0;};
+  function syncX(){
+    const v=val();
+    $("#xRow").textContent=money(v);
+    $("#xTot").textContent=money(cents(got+pend+v));
+    const h=$("#xHint");
+    if(sched&&v<sched-0.005){
+      h.textContent="Your schedule says "+money(sched)+" is still due before "+fmtShort(cyc(i).e)+".";
+      h.classList.add("warn");
+    }else{h.textContent="On top of the "+money(cents(got+pend))+" already counted.";h.classList.remove("warn");}
+  }
+  $("#xA").addEventListener("input",syncX); syncX();
+  const sb=$("#xSched");
+  if(sb)sb.onclick=()=>{$("#xA").value=sched.toFixed(2);syncX();};
   $("#xSave").onclick=()=>{S.expect=S.expect||{};S.expect[String(i)]=val();save();closeSheet();render();toast("Saved");};
   $("#xAll").onclick=()=>{S.expect=S.expect||{};const v=val();
     for(let k=i;k<S.cycles.length;k++)S.expect[String(k)]=v;
     save();closeSheet();render();toast("Applied to "+(S.cycles.length-i)+" cycles");};
-  if(set)$("#xClear").onclick=()=>{delete S.expect[String(i)];save();closeSheet();render();toast("Back to the average");};
+  if(set)$("#xClear").onclick=()=>{delete S.expect[String(i)];save();closeSheet();render();toast("Worked out automatically");};
 }
 
 /* ---------- type-to-filter combo ---------- */
@@ -1284,7 +1337,7 @@ function renderPlan(){
   const daysLeft=Math.max(0,28-el);
   const alloc=cents(budget);
   const gotIn=sumOf(incClearedIn(i)),pendIn=sumOf(incPendingIn(i));
-  const expIn=expectedIn(i),toCome=cents(Math.max(0,expIn-gotIn-pendIn));
+  const toCome=toComeIn(i),expIn=cents(gotIn+pendIn+toCome);
   const fromSav=savIncoming(),opening=openingBal(i);
   const spentClear=txIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const savedOut=savIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
@@ -1385,7 +1438,13 @@ function renderPlan(){
       ${ln("Left over when the cycle began",opening,"what was in checking on "+fmtShort(c.s)+" · tap to adjust",null,`data-carry="${i}"`)}
       ${ln("Income received",gotIn,null,"in")}
       ${pendIn?ln("Income on the way",pendIn,"already scheduled","in"):""}
-      ${ln("Still expected in",toCome,"tap to change what you expect this cycle","in",`data-expect="${i}"`)}
+      ${ln("Still expected in",toCome,
+        (()=>{const sc=scheduledIncome(i);
+          return sc&&toCome<sc-0.005
+            ? "your schedule says "+money(sc)+" is still due — tap to fix"
+            : "tap to change what's still to come";})(),
+        (()=>{const sc=scheduledIncome(i);return sc&&toCome<sc-0.005?"over":"in";})(),
+        `data-expect="${i}"`)}
       ${pre?ln("Preorders",-pre):""}
       <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>To cover the plan</b></div><div class="amt num">${money(cover)}</div></div>
     </div>
@@ -1400,7 +1459,7 @@ function renderPlan(){
     </div>
     <div class="card">
       <div class="legend" style="margin-bottom:8px"><span>You usually spend</span><b class="num">${money(avgSpend(i,6))}</b></div>
-      <button class="btn sm ghost" data-expect="${i}">Expecting ${money(expIn)} in this cycle — change</button>
+      <button class="btn sm ghost" data-expect="${i}">${money(toCome)} still to come · ${money(expIn)} this cycle — change</button>
       <button class="btn sm ghost" data-carry="${i}">Opening balance ${money(opening)} — adjust</button>
       ${gap<0?`<button class="btn sm ghost" data-pullsav="${Math.abs(gap).toFixed(2)}" style="color:var(--save);border-color:var(--save)">Cover the ${money(Math.abs(gap))} from savings</button>`:""}
     </div>`;
@@ -1834,7 +1893,7 @@ function openLine(lid){
   /* what the whole cycle has to work with, and what's left unallocated */
   const opening=openingBal(i);
   const gotIn=sumOf(incClearedIn(i)),pendIn=sumOf(incPendingIn(i));
-  const expIn=expectedIn(i),toCome=cents(Math.max(0,expIn-gotIn-pendIn));
+  const toCome=toComeIn(i),expIn=cents(gotIn+pendIn+toCome);
   /* savings withdrawals are not added here — see the note in renderPlan */
   const cover=cents(opening+gotIn+pendIn+toCome-preorders());
   const allocOther=cents(rows.reduce((a,r)=>a+r.bud,0)-row.bud);
