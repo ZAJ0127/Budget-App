@@ -1442,6 +1442,11 @@ function renderPlan(){
       : `<div class="row" style="padding:9px 15px">${inner}</div>`;
   };
   const adds=`<div class="card">
+      <h2>Free to spend</h2>
+      <div class="meter-amt num ${onHand<0?"over":onHand>0?"good":""}">${money(onHand)}</div>
+      <div class="meter-sub">in checking now, less everything pending</div>
+    </div>
+    <div class="card">
       <h2>Does the plan add up?</h2>
       <div class="meter-amt num ${gap<0?"over":gap>0?"good":""}" style="font-size:32px">${money(Math.abs(gap))}</div>
       <div class="meter-sub">${gap<0?"more allocated than you'll have":gap>0?"spare after everything's allocated":"allocated to the penny"}</div>
