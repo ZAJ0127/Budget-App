@@ -486,7 +486,7 @@ function planFor(i){
   const list=planTx(i), used=new Set();
   const out=S.lines.map(l=>{
     let spent=0;
-    if(l.kind==="savings") spent=savIn(i).reduce((a,x)=>a+x.a,0);
+    if(l.kind==="savings") spent=cents(savIn(i).reduce((a,x)=>a+x.a,0)+minCredit(i));
     else if(l.kind==="fund") spent=fundPutIn(i,l.fund);
     else for(const t of list){ if(used.has(t.id))continue; if(lineMatches(l,t)){spent+=t.a;used.add(t.id);} }
     const bud=b[l.id]||0;
@@ -579,7 +579,9 @@ function savingsTotal(){
 const bankAcc=()=>S.accounts.find(a=>a.type==="bank");
 const bankBal=()=>{const a=bankAcc();return a?cents(accBal(a)):0;};
 const preorders=()=>S.accounts.filter(a=>a.type==="manual").reduce((s,a)=>s+(a.bal||0),0);
-const freeToSpend=()=>cents(bankBal()-openBalance()-preorders());
+const minChk=()=>+S.settings.minCheck||0;                         /* kept in checking, never free to spend */
+const minCredit=i=>+((S.settings.minCredits||{})[String(i)])||0;  /* counted as saved in the cycle it was set */
+const freeToSpend=()=>cents(bankBal()-openBalance()-preorders()-minChk());
 const accKind=a=>({bank:"income, less spending and savings",pending:"charged, not out yet",
   linked:"every savings transfer you've logged",savings:a.upd?"set "+fmtShort(a.upd)+" "+dOf(a.upd).getFullYear():"tap to set",
   manual:a.upd?"set "+fmtShort(a.upd)+" "+dOf(a.upd).getFullYear():"tap to set"})[a.type];
@@ -657,7 +659,7 @@ function lowWarning(){
   if(free>=f-0.005)return "";
   const short=f-free;
   return `<div class="banner" style="background:var(--dangerbg);border-color:var(--dangerline);color:var(--dangerink)">
-    <b>${free<0?"Pending charges take you past zero":"Below the cushion you set"}</b><br>
+    <b>${free<0?(minChk()?"Pending charges take you below your checking minimum":"Pending charges take you past zero"):"Below the cushion you set"}</b><br>
     Once ${money(pend)} of pending clears you'd be at ${money(free)}${f?", against a "+money(f)+" cushion":""}.
     That's ${money(short)} short.</div>`;
 }
@@ -1387,7 +1389,7 @@ function renderPlan(){
      money pulled out of savings is NOT added here either — a withdrawal is a
      negative budget on the Savings line, so it already lifts (cover - alloc).
      adding it twice was the old bug. */
-  const cover=cents(opening+gotIn+pendIn+toCome-pre+fundBack),gap=cents(cover-alloc);
+  const cover=cents(opening+gotIn+pendIn+toCome-pre+fundBack-minChk()+minCredit(i)),gap=cents(cover-alloc);
   const onHand=freeToSpend();
 
   if(cv==="plan"){
@@ -1416,12 +1418,15 @@ function renderPlan(){
     const fixed=rows.filter(r=>!isSF(r)&&isFixed(r.line)&&(r.bud||r.spent));
     const flex=rows.filter(r=>!isSF(r)&&!isFixed(r.line)&&(r.bud||r.spent));
     const empty=rows.filter(r=>!r.bud&&!r.spent&&!showSF(r));
+    const minRow=minChk()>0?`<button class="planline" data-minchk="1"><div class="pl"><b>Checking minimum</b>
+        <span class="num">Always kept in checking · never free to spend${minCredit(i)?" · "+money(minCredit(i))+" counted as saved":""}</span></div>
+        <div class="pr num">${money(minChk())}<small>minimum</small></div></button>`:"";
     const sb=sfRows.reduce((a,r)=>a+r.bud,0),ss=sfRows.reduce((a,r)=>a+r.spent,0);
     const sfCard=`<div class="card flush"><div class="fold" style="cursor:default;display:flex;justify-content:space-between;align-items:center">
         <button type="button" data-fold="sfC" style="flex:1;text-align:left;font:inherit;color:inherit;padding:0"><span>SAVINGS &amp; FUNDS</span>
           <span class="chev num" style="margin-left:8px">${money(ss)} of ${money(sb)} ${F.sfC?"▾":"▴"}</span></button>
         <button type="button" data-tabjump="funds" style="color:var(--accent);font-size:13.5px;padding:2px 0 2px 10px">All funds ›</button></div>
-      ${F.sfC?"":(sfRows.length?sfRows.map(line).join(""):`<div class="empty" style="padding:14px 16px">Nothing planned for savings or funds this cycle. Balances are under All funds.</div>`)}</div>`;
+      ${F.sfC?"":minRow+(sfRows.length?sfRows.map(line).join(""):`<div class="empty" style="padding:14px 16px">Nothing planned for savings or funds this cycle. Balances are under All funds.</div>`)}</div>`;
     const fb=fixed.reduce((a,r)=>a+r.bud,0),fs=fixed.reduce((a,r)=>a+r.spent,0);
     const list=`<div class="card flush">
       ${fixed.length?`<button class="fold" data-fold="fixedC"><span>FIXED · ${fixed.length} line${fixed.length===1?"":"s"}</span>
@@ -1440,7 +1445,12 @@ function renderPlan(){
         ? `<button class="btn sm ghost" data-matchall="${i}">Match the plan to what's spent — ${left>0?"drops":"raises"} it by ${money(Math.abs(left))}</button>`
         : ``}
       <div class="hint" style="margin:0">Tap a line to set its budget.</div></div>`;
-    $("#p-plan").innerHTML=seg+hero+list+sfCard;return;
+    const co=(S.carryOvers||{})[String(i)];
+    const coNote=co&&co.a>0?`<div class="card" style="padding:12px 16px"><div class="legend"><span>Carried over from last cycle</span><b class="num" style="color:var(--save)">${money(co.a)}</b></div>
+      <div class="hint" style="margin:4px 0 0">Already in your opening balance. Add it to the lines you want.</div></div>`:"";
+    const unused=unusedOf(i);
+    const coBtn=unused>0.005&&i<=nowCycle()?`<div class="card"><button class="btn sm" data-carryover="${i}" style="margin-top:0">Carry over leftovers · ${money(unused)}</button></div>`:"";
+    $("#p-plan").innerHTML=seg+hero+coNote+list+sfCard+coBtn;return;
   }
 
   if(cv==="break"){
@@ -1806,7 +1816,7 @@ $("#saveEntry").onclick=()=>{
   if(payFund&&a>fundBal(payFund)+0.005&&!confirm("That's more than the "+money(fundBal(payFund))+" in "+fundOf(payFund).name+". Pay it from the fund anyway?"))return;
   if(delta<0&&!payFund){
     const after=freeToSpend()+delta,f=floorOf();
-    if(after<f&&!confirm("That leaves "+money(after)+(f?" against your "+money(f)+" cushion":" in checking")+
+    if(after<f&&!confirm((minChk()&&after<0?"That takes checking "+money(-after)+" below your "+money(minChk())+" minimum":"That leaves "+money(after)+(f?" against your "+money(f)+" cushion":" in checking"))+
        ".\n\nAdd it anyway?"))return;
   }
   if(view.mode==="spend"){
@@ -1957,6 +1967,51 @@ function openEdit(id,kind){
 }
 
 /* ---------- plan line budget ---------- */
+const unusedOf=i=>cents(planFor(i).rows.filter(r=>r.line.kind!=="savings"&&r.line.kind!=="fund"&&r.rem>0).reduce((a,r)=>a+r.rem,0));
+function openMinCheck(){
+  const m=minChk();
+  openSheet(`<div class="sheethead"><h3>Checking minimum</h3><button class="close" data-close>×</button></div>
+    <label class="f"><span>Always keep this much in checking</span><div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
+      <input class="num" id="mcA" type="text" inputmode="decimal" value="${m||""}" placeholder="0.00"></div>
+      <div class="hint">It's taken out of "free to spend" and the plan, and you get a warning before anything takes checking below it. Set 0 to turn it off.</div></label>
+    <div class="chips" style="margin-top:12px"><button type="button" class="chip on" id="mcS">✓ Count an increase as saved this cycle</button></div>
+    <div class="hint">Counted once, on the Savings line, because the money stays put instead of going to Apple Savings.</div>
+    <button class="btn" id="mcGo">Save</button>`);
+  let cnt=true;
+  $("#mcS").onclick=()=>{cnt=!cnt;$("#mcS").classList.toggle("on",cnt);$("#mcS").textContent=cnt?"✓ Count an increase as saved this cycle":"Don't count it as saved";};
+  $("#mcGo").onclick=()=>{
+    const v=num($("#mcA").value),n=isFinite(v)&&v>0?+v.toFixed(2):0;
+    const up=cents(n-m);
+    if(up>0&&cnt){S.settings.minCredits=S.settings.minCredits||{};const k=String(nowCycle());S.settings.minCredits[k]=cents((S.settings.minCredits[k]||0)+up);}
+    if(n===0)S.settings.minCredits={};
+    S.settings.minCheck=n;save();closeSheet();render();toast(n?"Minimum is "+money(n):"Minimum turned off");};
+}
+function openCarry(i){
+  const un=unusedOf(i);
+  const opts=[{id:"",name:"Savings (not in a fund)"}].concat(S.funds.map(f=>({id:f.id,name:f.name})));
+  const rows=planFor(i).rows.filter(r=>r.line.kind!=="savings"&&r.line.kind!=="fund"&&r.rem>0.005).sort((a,b)=>b.rem-a.rem);
+  openSheet(`<div class="sheethead"><h3>Carry over leftovers</h3><span class="hint" style="margin:0">${fmtShort(cyc(i).s)} – ${fmtShort(cyc(i).e)}</span><button class="close" data-close>×</button></div>
+    <div class="card" style="margin-top:12px"><h2>Unused plan money</h2><div class="meter-amt num">${money(un)}</div>
+      <div class="hint" style="margin:6px 0 0">${rows.slice(0,6).map(r=>esc(r.line.name)+" "+money(r.rem)).join(" · ")}${rows.length>6?" · …":""}</div></div>
+    <label class="f"><span>Send some to Apple Savings (optional)</span><div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
+      <input class="num" id="coS" type="text" inputmode="decimal" placeholder="0.00"></div></label>
+    <label class="f"><span>Into</span><select class="inp" id="coT">${opts.map(o=>`<option value="${o.id}">${esc(o.name)}</option>`).join("")}</select></label>
+    <div class="card" id="coP"></div>
+    <div class="hint">What you don't send stays in checking and is part of next cycle's opening balance. Add it to the lines you want there. The part you send waits in Pending until the transfer lands.</div>
+    <button class="btn" id="coGo">Carry over</button>`);
+  const send=()=>{const v=num($("#coS").value);return isFinite(v)&&v>0?Math.min(v,un):0;};
+  const prev=()=>{const sd=send();$("#coP").innerHTML=`<div class="legend num"><span>Carried to next cycle, stays in checking</span><b>${money(un-sd)}</b></div>
+    <div class="legend num" style="margin-top:6px"><span>Sent to Apple Savings</span><b>${money(sd)}</b></div>`;};
+  $("#coS").oninput=prev;prev();
+  $("#coGo").onclick=()=>{
+    const sd=cents(send()),t=$("#coT").value,d=dateInCycle(i);
+    if(sd>0){
+      if(t)putInFund(t,sd,d,{pend:true});
+      else S.sav.push({id:uid("v"),ts:Date.now(),d,n:"Apple Savings",a:sd,y:i,p:1});}
+    S.carryOvers=S.carryOvers||{};
+    S.carryOvers[String(i+1)]={a:cents(un-sd),from:i};
+    save();closeSheet();render();toast(money(un-sd)+" carried over"+(sd?", "+money(sd)+" sent to savings":""));};
+}
 function openLine(lid){
   const l=byId(S.lines,lid),i=view.cycle;
   const b=S.budgets[String(i)]||(S.budgets[String(i)]={});
@@ -1970,7 +2025,7 @@ function openLine(lid){
   const gotIn=sumOf(incClearedIn(i)),pendIn=sumOf(incPendingIn(i));
   const toCome=toComeIn(i),expIn=cents(gotIn+pendIn+toCome);
   /* savings withdrawals are not added here — see the note in renderPlan */
-  const cover=cents(opening+gotIn+pendIn+toCome-preorders()+fundBackIn(i));
+  const cover=cents(opening+gotIn+pendIn+toCome-preorders()+fundBackIn(i)-minChk()+minCredit(i));
   const allocOther=cents(rows.reduce((a,r)=>a+r.bud,0)-row.bud);
   const freeToAllocate=cents(cover-allocOther);
   const isSav=l.kind==="savings";
@@ -2370,6 +2425,7 @@ function renderFunds(){
       <div class="main"><b>Savings</b><span>Whatever is left</span></div><div class="amt num">${money(un)}</div></div></div>`;
   $("#p-funds").innerHTML=hero+`<div style="height:12px"></div>`+list+`
     <div class="card"><button class="btn sm ghost" data-newfund="1">New fund</button>
+      <button class="btn sm ghost" data-minchk="1">Checking minimum${minChk()?" · "+money(minChk()):""}</button>
       <button class="btn sm ghost" data-editacct="1">Edit the account</button>
       <div class="hint" style="margin:8px 0 0">Funds earn Apple Savings interest. The total always equals the balance above.</div></div>`;
 }
@@ -2649,6 +2705,8 @@ document.addEventListener("click",e=>{
   const t=e.target;
   if(t.closest("[data-close]"))return closeSheet();
   const ed=t.closest("[data-edit]");if(ed)return openEdit(ed.dataset.edit,ed.dataset.kind);
+  const mn=t.closest("[data-minchk]");if(mn)return openMinCheck();
+  const co=t.closest("[data-carryover]");if(co)return openCarry(+co.dataset.carryover);
   const af=t.closest("[data-applefunds]");if(af)return setTab("funds");
   const am=t.closest("[data-addmoney]");if(am)return openAddMoney();
   const mm=t.closest("[data-movemoney]");if(mm)return openMove();
