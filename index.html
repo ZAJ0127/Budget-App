@@ -241,7 +241,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
       <div class="f" id="wRet"><span>Retailer</span><div id="fRet"></div></div>
       <div class="f" id="wFund" style="display:none"><span>Pay from a fund</span>
         <select class="inp" id="fFund"></select>
-        <div class="hint">Pick a fund and the bill comes out of it. The plan isn't charged.</div></div>
+        <div class="hint" id="fundHint">Pick a fund and the bill comes out of it. The plan isn't charged.</div></div>
       <div class="f" id="wSavAcct"><span id="lblSavAcct">Savings account</span><div id="fSavAcct"></div></div>
       <label class="f"><span>Date</span>
         <div class="datewrap">
@@ -457,12 +457,20 @@ const money0=n=>S.settings.symbol+Math.round(Math.abs(n)).toLocaleString();
 
 const txIn=i=>S.tx.filter(t=>t.y===i);
 const incIn=i=>S.inc.filter(t=>t.y===i);
-const savIn=i=>S.sav.filter(t=>t.y===i&&!t.fund);      /* fund moves are not "saved this cycle" */
+const savIn=i=>S.sav.filter(t=>t.y===i&&!t.fund&&!t.mv);      /* fund moves are not "saved this cycle" */
 const planTx=i=>txIn(i).filter(t=>!t.fund);             /* spending paid out of a fund is not charged to the plan */
 const fundOf=id=>(S.funds||[]).find(f=>f.id===id);
 const fundBal=id=>cents(S.sav.filter(x=>x.fund===id).reduce((a,x)=>a+x.a,0));
 const fundLineOf=id=>S.lines.find(l=>l.kind==="fund"&&l.fund===id);
 const fundsTotal=()=>cents((S.funds||[]).reduce((a,f)=>a+fundBal(f.id),0));
+const FUND_COLORS=["#6FCB9C","#E0B25C","#F29BBE","#8A97AD","#F0A06A","#5CC8D6","#B7D96B","#7AA6F0","#B9A5EA","#D98C8C"];
+const fundColor=f=>f.color||FUND_COLORS[Math.max(0,(S.funds||[]).indexOf(f))%FUND_COLORS.length];
+const appleAcc=()=>S.accounts.find(a=>a.type==="linked");
+const appleTotal=()=>cents(totalSaved()+((appleAcc()||{}).bal||0));
+const fundsCleared=()=>cents(S.sav.filter(x=>x.fund&&!x.p).reduce((a,x)=>a+x.a,0));
+const unalloc=()=>cents(appleTotal()-fundsCleared());
+const emergMin=f=>f.emerg?cents((f.emerg.months||6)*(f.emerg.monthly||0)):0;
+const fundForSub=sid=>(S.funds||[]).find(f=>f.offer!==false&&(f.cats||[]).includes(sid));
 const fundPutIn=(i,id)=>cents(S.sav.filter(x=>x.fund===id&&x.y===i&&x.a>0).reduce((a,x)=>a+x.a,0));
 /* fund money pulled back to fund plan lines in cycle i: extra cash the plan can use */
 const fundBackIn=i=>cents(S.sav.filter(x=>x.fund&&x.y===i&&x.adj&&x.a<0).reduce((a,x)=>a-x.a,0));
@@ -514,7 +522,7 @@ let cCat,cRet,cCard,cSav;
 function fillSelects(){
   const keep=[cCat&&cCat.id,cRet&&cRet.id,cCard&&cCard.id,cSav&&cSav.id];
   cCat =combo($("#fCat"), catItems , {value:keep[0]||(S.subs[0]||{}).id, placeholder:"Type or pick a category",
-    allowNew:true, newLabel:"Add a new category called", onNew:(txt,pick)=>newCategoryFlow(txt,pick)});
+    allowNew:true, newLabel:"Add a new category called", onNew:(txt,pick)=>newCategoryFlow(txt,pick), onPick:id=>suggestFund(id)});
   cRet =combo($("#fRet"), retItems , {value:keep[1]||"", allowNew:true, placeholder:"Type or pick a retailer"});
   cSav =combo($("#fSavAcct"), savAcctItems, {value:keep[3]||(savAcctItems()[0]||{}).id,
     allowNew:true, placeholder:"Type or pick an account"});
@@ -687,7 +695,7 @@ function openingBal(i){
   let since=0;
   for(const t of S.tx ) if(!t.p&&t.y>=i) since-=t.a;
   for(const x of S.inc) if(!x.p&&x.y>=i) since+=x.a;
-  for(const s of S.sav) if(!s.p&&s.y>=i) since-=s.a;
+  for(const s of S.sav) if(!s.p&&s.y>=i&&!s.mv&&!s.out) since-=s.a;
   return cents(bankBal()-since-owedFromEarlier(i));
 }
 function carriedInto(i){
@@ -1143,7 +1151,7 @@ function chartLine(vals,idx){
 function renderHome(){
   const bank=bankBal(),pend=openBalance(),pre=preorders(),svTot=savingsTotal(),free=freeToSpend();
   const isSv=a=>a.type==="linked"||a.type==="savings";
-  const accRow=a=>`<button class="row" data-acc="${a.id}">
+  const accRow=a=>`<button class="row" ${a.type==="linked"?`data-applefunds="1"`:`data-acc="${a.id}"`}>
       <div class="main"><b>${esc(a.name)}</b><span>${esc(accKind(a)||"")}</span></div>
       <div class="amt num ${isSv(a)?"sv":""}" style="${a.type==="pending"&&pend?"color:var(--over)":""}">${money(accBal(a))}</div></button>`;
   const hero=`<div class="card">
@@ -1818,7 +1826,7 @@ $("#saveEntry").onclick=()=>{
     if(view.pend)rec.p=1;
     S.sav.push(rec);
   }
-  save();$("#fAmount").value="";$("#fName").value="";$("#fFund").value="";
+  save();$("#fAmount").value="";$("#fName").value="";$("#fFund").value="";view.autoFund=null;
   view.cycle=y;
   toast(view.mode==="spend"&&view.refund?"Refund of "+money(a)+" logged"
        :view.mode==="save"&&view.wdraw?money(a)+" taken out of savings":"Added "+money(a));
@@ -2317,6 +2325,10 @@ function removeWithLinks(rec,kind,arr){
   if(kind==="sav"&&rec.adj)for(const x of rec.adj){
     bumpBudget(rec.y,x.l,-x.a);undo.push(()=>bumpBudget(rec.y,x.l,x.a));}
   const other=kind==="sav"?S.tx:S.sav;
+  if(rec.mv){for(let j=S.sav.length-1;j>=0;j--){const o=S.sav[j];
+    if(o!==rec&&o.mv===rec.mv){S.sav.splice(j,1);undo.push(()=>S.sav.splice(Math.min(j,S.sav.length),0,o));}}}
+  if(kind==="sav"&&rec.out){const ac=byId(S.accounts,rec.out);
+    if(ac){ac.bal=cents((ac.bal||0)+rec.a);undo.push(()=>{ac.bal=cents((ac.bal||0)-rec.a);});}}
   if(rec.fl){const j=other.findIndex(x=>x.id===rec.fl);
     if(j>=0){const o=other.splice(j,1)[0];undo.push(()=>other.splice(Math.min(j,other.length),0,o));}}
   return()=>{for(let k=undo.length-1;k>=0;k--)undo[k]();};
@@ -2324,96 +2336,250 @@ function removeWithLinks(rec,kind,arr){
 const dateInCycle=i=>{const c=cyc(i),t=todayIso();return t<c.s?c.s:t>c.e?c.e:t;};
 const spendLines=()=>S.lines.filter(l=>l.kind==="subs"||l.kind==="group");
 
+/* ---------- Apple Savings page: the account, split into funds ---------- */
 function renderFunds(){
-  const fs=S.funds,tot=fundsTotal(),i=view.cycle;
-  const hero=`<div class="card"><h2>In funds</h2>
-    <div class="meter-amt num" style="color:var(--save)">${money(tot)}</div>
-    <div class="meter-sub">Kept inside Apple Savings, so it earns interest. It isn't counted as saved this cycle.</div></div>`;
+  const fs=S.funds,apple=appleTotal(),un=unalloc(),ac=appleAcc();
+  const pctOf=v=>apple>0?Math.max(0,v)/apple*100:0;
+  const segs=fs.map(f=>`<i style="display:block;width:${pctOf(fundBal(f.id))}%;background:${fundColor(f)}"></i>`).join("")
+    +`<i style="display:block;width:${pctOf(un)}%;background:#3A465A"></i>`;
+  const hero=`<div class="card"><h2>${esc(ac?ac.name:"Apple Savings")}</h2>
+    <div class="meter-amt num" style="color:var(--save)">${money(apple)}</div>
+    <div style="display:flex;height:12px;border-radius:6px;overflow:hidden;gap:2px;margin:14px 0 0;background:var(--soft)">${segs}</div>
+    <div class="legend num" style="margin-top:10px"><span>In funds ${money(fundsTotal())}</span><span>Not in a fund ${money(un)}</span></div></div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn" style="flex:1;margin:0" data-addmoney="1">Add money</button>
+      <button class="btn ghost" style="flex:1;margin:0" data-movemoney="1">Move between funds</button></div>`;
   const row=f=>{
-    const bal=fundBal(f.id),pct=f.target>0?Math.max(0,Math.min(100,bal/f.target*100)):0;
-    const sub=f.target>0?money(bal)+" of "+money(f.target)+(f.due?" · by "+fmtShort(f.due)+" "+dOf(f.due).getFullYear():""):"No goal amount";
-    const ln=fundLineOf(f.id),bud=ln?((S.budgets[String(i)]||{})[ln.id]||0):0;
-    return `<button class="row" data-fund="${f.id}"><div class="main"><b>${esc(f.name)}</b>
-      <span class="num">${sub}${bud?" · "+money(bud)+" planned this cycle":""}</span>
-      ${f.target>0?`<div class="bar" style="margin:8px 0 0;height:6px"><div class="fill" style="width:${pct}%"></div></div>`:""}</div>
-      <div class="amt num sv">${money(bal)}</div></button>`;};
-  $("#p-funds").innerHTML=hero+`<div class="card flush">${fs.length?fs.map(row).join("")
-      :`<div class="empty"><b>No funds yet</b>Make one for a goal or for big bills like car insurance.</div>`}</div>
-    <div class="card"><button class="btn" data-newfund="1">New fund</button>
-      <div class="hint" style="margin:8px 0 0">Tap a fund to put money in or use it.</div></div>`;
+    const bal=fundBal(f.id),min=emergMin(f),low=min>0&&bal<min-0.005;
+    const sub=f.emerg?(f.emerg.monthly>0?(bal/f.emerg.monthly).toFixed(1)+" months of bills":"Emergency money")
+      :f.dest?"Goes to "+((byId(S.accounts,f.dest)||{name:"another account"}).name)
+      :f.target>0?money(bal)+" of "+money(f.target)+(f.due?" · by "+fmtShort(f.due)+" "+dOf(f.due).getFullYear():"")
+      :(f.cats&&f.cats.length?f.cats.slice(0,2).map(subName).join(", ")+(f.cats.length>2?" +"+(f.cats.length-2):""):"No categories linked");
+    return `<button class="row" data-fund="${f.id}"><span style="width:10px;height:10px;border-radius:5px;flex:none;background:${fundColor(f)}"></span>
+      <div class="main"><b>${esc(f.name)}</b><span>${esc(sub)}</span></div>
+      <div class="amt num" style="${low?"color:var(--over)":""}">${money(bal)}</div></button>`;};
+  const stay=fs.filter(f=>!f.dest),leave=fs.filter(f=>f.dest);
+  const list=`<div class="card flush">
+    ${stay.length?`<div class="daylabel" style="border-top:none">Stays in Apple Savings</div>${stay.map(row).join("")}`:""}
+    ${leave.length?`<div class="daylabel">Leaving Apple Savings</div>${leave.map(row).join("")}`:""}
+    <div class="daylabel">Not in a fund</div>
+    <div class="row"><span style="width:10px;height:10px;border-radius:5px;flex:none;background:#3A465A"></span>
+      <div class="main"><b>Savings</b><span>Whatever is left</span></div><div class="amt num">${money(un)}</div></div></div>`;
+  $("#p-funds").innerHTML=hero+`<div style="height:12px"></div>`+list+`
+    <div class="card"><button class="btn sm ghost" data-newfund="1">New fund</button>
+      <button class="btn sm ghost" data-editacct="1">Edit the account</button>
+      <div class="hint" style="margin:8px 0 0">Funds earn Apple Savings interest. The total always equals the balance above.</div></div>`;
 }
 
 function openFund(fid){
   const f=fundOf(fid);if(!f)return;
-  const bal=fundBal(fid),ln=fundLineOf(fid),i=view.cycle;
-  const bud=(S.budgets[String(i)]||{})[ln.id]||0,put=fundPutIn(i,fid);
+  const bal=fundBal(fid),ln=fundLineOf(fid),i=view.cycle,min=emergMin(f);
+  const bud=(S.budgets[String(i)]||{})[ln.id]||0;
   const moves=S.sav.filter(x=>x.fund===fid).sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:(b.ts||0)-(a.ts||0)).slice(0,8);
   const pct=f.target>0?Math.max(0,Math.min(100,bal/f.target*100)):0;
+  const mpct=min>0?Math.max(0,Math.min(100,bal/min*100)):0;
+  const low=min>0&&bal<min-0.005;
+  const cats=(f.cats||[]).map(subName);
   openSheet(`<div class="sheethead"><h3>${esc(f.name)}</h3>
-    <span class="hint" style="margin:0">in Apple Savings</span><button class="close" data-close>×</button></div>
+    <span class="hint" style="margin:0">${f.dest?"in Apple Savings, then "+esc((byId(S.accounts,f.dest)||{name:"out"}).name):"in Apple Savings"}</span><button class="close" data-close>×</button></div>
     <div class="card" style="margin-top:12px"><h2>Balance</h2>
-      <div class="meter-amt num" style="color:var(--save)">${money(bal)}</div>
+      <div class="meter-amt num" style="color:${low?"var(--over)":fundColor(f)}">${money(bal)}</div>
+      ${min>0?`<div class="bar" style="margin:12px 0 6px"><div class="fill" style="width:${mpct}%"></div></div>
+        <div class="legend"><span>${f.emerg.monthly>0?(bal/f.emerg.monthly).toFixed(1)+" months covered":""}</span><span>Minimum ${money(min)}</span></div>
+        ${low?`<div class="hint" style="color:var(--over);margin-top:6px">${money(min-bal)} below your minimum.</div>`:""}`:""}
       ${f.target>0?`<div class="bar" style="margin:12px 0 6px"><div class="fill" style="width:${pct}%"></div></div>
         <div class="legend"><span>Goal ${money(f.target)}${f.due?" · by "+fmtShort(f.due)+" "+dOf(f.due).getFullYear():""}</span>
           <span>${bal>=f.target?"Reached":money(f.target-bal)+" to go"}</span></div>`:""}</div>
-    <div class="card flush">
+    <div style="display:flex;gap:8px">
+      <button class="btn sm" style="flex:1;margin:0" id="fdAdd">Add to it</button>
+      <button class="btn sm ghost" style="flex:1;margin:0" id="fdUse">Draw from it</button>
+      <button class="btn sm ghost" style="flex:1;margin:0" id="fdMove">Move</button></div>
+    ${f.dest?`<button class="btn sm ghost" id="fdOut">Send out of Apple Savings</button>`:""}
+    <div class="card flush" style="margin-top:12px">
+      <div class="daylabel" style="border-top:none">Pays for these categories</div>
+      ${cats.length?cats.map(n=>`<div class="row" style="padding:9px 15px"><div class="main"><b style="font-weight:480">${esc(n)}</b></div></div>`).join("")
+        :`<div class="empty" style="padding:14px">None yet.</div>`}
+      <button class="row" id="fdCats"><div class="main"><b style="color:var(--accent);font-weight:560">Choose categories</b>
+        <span>Log one of these and the app offers to pay from this fund.</span></div></button>
+      <button class="row" id="fdOffer"><div class="main"><b style="font-weight:480">Offer this fund when I log one</b></div>
+        <div class="amt" style="font-weight:620;color:${f.offer===false?"var(--faint)":"var(--good)"}">${f.offer===false?"Off":"On"}</div></button></div>
+    <div class="card flush" style="margin-top:12px">
       <div class="row" style="padding:10px 15px"><div class="main"><b style="font-weight:480">Planned this cycle</b>
-        <span>${fmtShort(cyc(i).s)} – ${fmtShort(cyc(i).e)}</span></div><div class="amt num">${money(bud)}</div></div>
-      <div class="row" style="padding:10px 15px"><div class="main"><b style="font-weight:480">Set aside so far</b></div>
-        <div class="amt num sv">${money(put)}</div></div></div>
-    <button class="btn" id="fdPut">Set money aside</button>
-    <button class="btn sm ghost" id="fdUse">Use some of it</button>
+        <span>${fmtShort(cyc(i).s)} – ${fmtShort(cyc(i).e)}</span></div><div class="amt num">${money(bud)}</div></div></div>
     <button class="btn sm ghost" id="fdBud">Plan an amount for each cycle</button>
-    <button class="btn sm ghost" id="fdEdit">Rename or change the goal</button>
-    <div class="hint" style="margin-top:12px">To pay a bill from this fund, log it on the Add tab and pick the fund under “Pay from a fund”.</div>
+    <button class="btn sm ghost" id="fdPut">Set aside from a plan line</button>
+    <button class="btn sm ghost" id="fdEdit">Rename or change settings</button>
     <div class="card flush" style="margin-top:12px">
       <div class="daylabel" style="border-top:none">Recent moves</div>
-      ${moves.length?moves.map(x=>`<button class="row" data-edit="${x.id}" data-kind="sav"><div class="main"><b>${esc(x.note||(x.a<0?"Taken out":"Set aside"))}</b>
+      ${moves.length?moves.map(x=>`<button class="row" data-edit="${x.id}" data-kind="sav"><div class="main"><b>${esc(x.note||((x.mv||x.out)?x.n:(x.a<0?"Taken out":"Set aside")))}</b>
         <span>${fmtShort(x.d)}${x.p?" · not landed":""}</span></div>
         <div class="amt num sv" style="${x.a<0?"color:var(--over)":""}">${money(x.a,true)}</div></button>`).join("")
         :`<div class="empty" style="padding:16px">Nothing in or out yet.</div>`}</div>`);
-  $("#fdPut").onclick=()=>openSetAside(fid);
+  $("#fdAdd").onclick=()=>openAddMoney(fid);
   $("#fdUse").onclick=()=>openFundUse(fid);
+  $("#fdMove").onclick=()=>openMove(fid);
+  if(f.dest)$("#fdOut").onclick=()=>openSendOut(fid);
+  $("#fdCats").onclick=()=>openFundCats(fid);
+  $("#fdOffer").onclick=()=>{f.offer=f.offer===false?true:false;save();openFund(fid);};
   $("#fdBud").onclick=()=>openLine(ln.id);
+  $("#fdPut").onclick=()=>openSetAside(fid);
   $("#fdEdit").onclick=()=>openFundEdit(fid);
+}
+
+function openFundCats(fid){
+  const f=fundOf(fid),chosen=new Set(f.cats||[]);
+  const picker=S.groups.map(g=>catsOfGroup(g.id).map(c=>
+    `<div class="daylabel">${esc(g.name)} › ${esc(c.name)}</div>`+
+    subsOfCat(c.id).map(s=>`<label class="row"><input type="checkbox" class="fcsub" value="${s.id}" ${chosen.has(s.id)?"checked":""} style="width:20px;height:20px"><div class="main"><b style="font-weight:450">${esc(s.name)}</b></div></label>`).join("")).join("")).join("");
+  openSheet(`<div class="sheethead"><h3>${esc(f.name)} pays for</h3><button class="close" data-close>×</button></div>
+    <div class="hint" style="margin-top:6px">Tick the sub-categories this fund covers.</div>
+    <div class="card flush" style="margin-top:10px;max-height:56vh;overflow:auto">${picker}</div>
+    <button class="btn" id="fcSave">Save</button>`);
+  $("#fcSave").onclick=()=>{
+    f.cats=[...document.querySelectorAll(".fcsub:checked")].map(x=>x.value);
+    save();closeSheet();render();openFund(fid);};
+}
+
+/* money moves inside Apple Savings: a pair of entries that net to zero, so the
+   account total and checking never change. null = "Savings", the part not in a fund. */
+function moveMoney(from,to,amt,d){
+  const a=cents(amt),y=cycleFor(d),gid=uid("m"),ts=Date.now();
+  const nm=id=>id?fundOf(id).name:"Savings";
+  const mk=(fund,sign,other)=>{const r={id:uid("v"),ts,d,n:(sign<0?"To ":"From ")+nm(other),a:sign*a,y,mv:gid};if(fund)r.fund=fund;return r;};
+  S.sav.push(mk(from,-1,to),mk(to,1,from));
+}
+function openMove(fromId,toId){
+  const opts=[{id:"",name:"Savings (not in a fund)",bal:unalloc()}].concat(S.funds.map(f=>({id:f.id,name:f.name,bal:fundBal(f.id)})));
+  const selF=fromId!==undefined&&fromId!==null?fromId:"",selT=toId||(opts.find(o=>o.id!==selF)||{}).id||"";
+  const sel=(id,cur)=>opts.map(o=>`<option value="${o.id}" ${o.id===cur?"selected":""}>${esc(o.name)} · ${money(o.bal)}</option>`).join("");
+  openSheet(`<div class="sheethead"><h3>Move money</h3><span class="hint" style="margin:0">stays in Apple Savings</span><button class="close" data-close>×</button></div>
+    <label class="f"><span>Amount</span><div class="money-in"><i>${esc(S.settings.symbol)}</i><input class="num" id="mvA" type="text" inputmode="decimal" placeholder="0.00"></div></label>
+    <label class="f"><span>From</span><select class="inp" id="mvF">${sel("",selF)}</select></label>
+    <label class="f"><span>To</span><select class="inp" id="mvT">${sel("",selT)}</select></label>
+    <label class="f"><span>Date</span><input class="inp num" id="mvD" type="date" value="${todayIso()}"></label>
+    <div class="card" id="mvP" style="margin-top:12px"></div>
+    <div class="hint">Nothing leaves the account, so checking doesn't change and this isn't counted as saved this cycle.</div>
+    <button class="btn" id="mvGo">Move it</button>`);
+  const balOf=id=>id?fundBal(id):unalloc();
+  const nameOf=id=>id?fundOf(id).name:"Savings";
+  function prev(){
+    const a=num($("#mvA").value)||0,f=$("#mvF").value,t=$("#mvT").value;
+    $("#mvP").innerHTML=f===t?`<div class="hint" style="margin:0">Pick two different places.</div>`
+      :`<div class="legend num"><span>${esc(nameOf(f))}</span><span>${money(balOf(f))} → <b>${money(balOf(f)-a)}</b></span></div>
+        <div class="legend num" style="margin-top:6px"><span>${esc(nameOf(t))}</span><span>${money(balOf(t))} → <b>${money(balOf(t)+a)}</b></span></div>`;
+  }
+  ["mvA","mvF","mvT"].forEach(id=>$("#"+id).oninput=prev);$("#mvF").onchange=prev;$("#mvT").onchange=prev;prev();
+  $("#mvGo").onclick=()=>{
+    const a=num($("#mvA").value),f=$("#mvF").value,t=$("#mvT").value,d=$("#mvD").value||todayIso();
+    if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
+    if(f===t){toast("Pick two different places");return;}
+    if(a>balOf(f)+0.005&&!confirm("That's more than the "+money(balOf(f))+" in "+nameOf(f)+". Move it anyway?"))return;
+    const ff=f?fundOf(f):null;
+    if(ff&&ff.emerg&&balOf(f)-a<emergMin(ff)-0.005&&!confirm("That takes "+ff.name+" below your "+money(emergMin(ff))+" minimum. Move it anyway?"))return;
+    moveMoney(f||null,t||null,a,d);save();closeSheet();render();toast(money(a)+" moved");};
+}
+
+function openAddMoney(toId){
+  const opts=[{id:"",name:"Savings (not in a fund)"}].concat(S.funds.map(f=>({id:f.id,name:f.name})));
+  const cur=toId||"";
+  openSheet(`<div class="sheethead"><h3>Add money</h3><span class="hint" style="margin:0">from checking</span><button class="close" data-close>×</button></div>
+    <label class="f"><span>Amount</span><div class="money-in"><i>${esc(S.settings.symbol)}</i><input class="num" id="amA" type="text" inputmode="decimal" placeholder="0.00"></div></label>
+    <label class="f"><span>Into</span><select class="inp" id="amT">${opts.map(o=>`<option value="${o.id}" ${o.id===cur?"selected":""}>${esc(o.name)}</option>`).join("")}</select></label>
+    <label class="f"><span>Date</span><input class="inp num" id="amD" type="date" value="${todayIso()}"></label>
+    <div class="hint">It comes out of checking and goes into Apple Savings. Money in a fund isn't counted as saved this cycle.</div>
+    <button class="btn" id="amGo">Add it</button>`);
+  $("#amGo").onclick=()=>{
+    const a=num($("#amA").value),t=$("#amT").value,d=$("#amD").value||todayIso();
+    if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
+    if(freeToSpend()-a<0&&!confirm("That's more than the "+money(freeToSpend())+" free in checking. Add it anyway?"))return;
+    if(t)putInFund(t,a,d,{});
+    else S.sav.push({id:uid("v"),ts:Date.now(),d,n:"Apple Savings",a:cents(a),y:cycleFor(d)});
+    save();closeSheet();render();toast(money(a)+" added");};
+}
+
+function openSendOut(fid){
+  const f=fundOf(fid),bal=fundBal(fid);
+  const accs=S.accounts.filter(a=>a.type==="savings");
+  if(!accs.length){toast("Add a savings account first (Home › Accounts)");return;}
+  openSheet(`<div class="sheethead"><h3>Send out of Apple Savings</h3><span class="hint" style="margin:0">${esc(f.name)}</span><button class="close" data-close>×</button></div>
+    <label class="f"><span>Amount</span><div class="money-in"><i>${esc(S.settings.symbol)}</i><input class="num" id="soA" type="text" inputmode="decimal" value="${bal>0?bal.toFixed(2):""}" placeholder="0.00"></div></label>
+    <label class="f"><span>Goes to</span><select class="inp" id="soT">${accs.map(a=>`<option value="${a.id}" ${a.id===f.dest?"selected":""}>${esc(a.name)} · ${money(a.bal||0)}</option>`).join("")}</select></label>
+    <label class="f"><span>Date</span><input class="inp num" id="soD" type="date" value="${todayIso()}"></label>
+    <div class="hint">The money leaves Apple Savings and is added to that account. It's recorded as a transfer, not spending, and checking doesn't change.</div>
+    <button class="btn" id="soGo">Send it</button>`);
+  $("#soGo").onclick=()=>{
+    const a=num($("#soA").value),ac=byId(S.accounts,$("#soT").value),d=$("#soD").value||todayIso();
+    if(!isFinite(a)||a<=0||!ac){toast("Enter an amount above zero");return;}
+    if(a>bal+0.005&&!confirm("That's more than the "+money(bal)+" in "+f.name+". Send it anyway?"))return;
+    const amt=cents(a);
+    S.sav.push({id:uid("v"),ts:Date.now(),d,n:"Sent to "+ac.name,a:-amt,y:cycleFor(d),fund:fid,out:ac.id});
+    ac.bal=cents((ac.bal||0)+amt);ac.upd=todayIso();
+    save();closeSheet();render();toast(money(amt)+" sent to "+ac.name);};
 }
 
 function openFundEdit(fid){
   const f=fid?fundOf(fid):null;
+  const accs=S.accounts.filter(a=>a.type==="savings");
   openSheet(`<div class="sheethead"><h3>${f?"Edit fund":"New fund"}</h3><button class="close" data-close>×</button></div>
-    <label class="f"><span>Name</span><input class="inp" id="fnN" value="${f?esc(f.name):""}" placeholder="e.g. Bills Fund, Next cycle, Trip"></label>
+    <label class="f"><span>Name</span><input class="inp" id="fnN" value="${f?esc(f.name):""}" placeholder="e.g. Medical, Trip, Emergency"></label>
     <label class="f"><span>Goal amount (optional)</span><div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
       <input class="num" id="fnT" type="text" inputmode="decimal" value="${f&&f.target?f.target:""}" placeholder="0.00"></div></label>
     <label class="f"><span>Wanted by (optional)</span><input class="inp num" id="fnD" type="date" value="${f&&f.due?f.due:""}"></label>
+    <label class="f"><span>Money leaves Apple Savings for</span><select class="inp" id="fnDest"><option value="">Nowhere, it stays here</option>
+      ${accs.map(a=>`<option value="${a.id}" ${f&&f.dest===a.id?"selected":""}>${esc(a.name)}</option>`).join("")}</select></label>
+    <div class="f"><span>Emergency fund</span>
+      <div class="seg"><button type="button" id="fnEmOff" class="${f&&f.emerg?"":"on"}">No</button><button type="button" id="fnEmOn" class="${f&&f.emerg?"on":""}">Yes, keep a minimum</button></div></div>
+    <div id="fnEm" style="display:${f&&f.emerg?"":"none"}">
+      <label class="f"><span>Monthly bills to cover</span><div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
+        <input class="num" id="fnEmM" type="text" inputmode="decimal" value="${f&&f.emerg?f.emerg.monthly:""}" placeholder="0.00"></div></label>
+      <label class="f"><span>Months to keep</span><input class="inp num" id="fnEmN" type="text" inputmode="decimal" value="${f&&f.emerg?f.emerg.months:6}"></label>
+      <div class="hint">The minimum is months times monthly bills. You get a warning before a draw that goes below it.</div></div>
     ${f?"":`<label class="f"><span>Plan this much every cycle (optional)</span><div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
       <input class="num" id="fnP" type="text" inputmode="decimal" placeholder="0.00"></div>
       <div class="hint">Starts with the cycle you're looking at and carries into every later one.</div></label>`}
     <button class="btn" id="fnSave">${f?"Save":"Create fund"}</button>
     ${f?`<button class="btn sm danger" id="fnDel">Delete fund</button>`:""}`);
+  let em=!!(f&&f.emerg);
+  const setEm=v=>{em=v;$("#fnEmOn").classList.toggle("on",v);$("#fnEmOff").classList.toggle("on",!v);$("#fnEm").style.display=v?"":"none";};
+  $("#fnEmOn").onclick=()=>setEm(true);$("#fnEmOff").onclick=()=>setEm(false);
   $("#fnSave").onclick=()=>{
     const n=$("#fnN").value.trim();if(!n){toast("Give it a name");return;}
-    const t=num($("#fnT").value),d=$("#fnD").value;
+    const t=num($("#fnT").value),d=$("#fnD").value,dest=$("#fnDest").value;
+    const apply=o=>{
+      if(isFinite(t)&&t>0)o.target=+t.toFixed(2);else delete o.target;
+      if(d)o.due=d;else delete o.due;
+      if(dest)o.dest=dest;else delete o.dest;
+      if(em){const m=num($("#fnEmM").value),k=num($("#fnEmN").value);o.emerg={monthly:isFinite(m)?+m.toFixed(2):0,months:isFinite(k)&&k>0?k:6};}
+      else delete o.emerg;};
     if(f){
-      f.name=n;if(isFinite(t)&&t>0)f.target=+t.toFixed(2);else delete f.target;
-      if(d)f.due=d;else delete f.due;
+      const old=f.name;f.name=n;apply(f);
       const ln=fundLineOf(f.id);if(ln)ln.name=n;
-      for(const x of S.sav)if(x.fund===f.id)x.n=n;
+      for(const x of S.sav)if(x.fund===f.id&&!x.mv&&!x.out&&x.n===old)x.n=n;
+      for(const x of S.sav)if(x.mv&&x.n&&x.n.endsWith(" "+old))x.n=x.n.slice(0,-old.length)+n;
       save();closeSheet();render();toast("Saved");return;}
-    const nf={id:uid("fd"),name:n};
-    if(isFinite(t)&&t>0)nf.target=+t.toFixed(2);
-    if(d)nf.due=d;
+    const nf={id:uid("fd"),name:n};apply(nf);
     S.funds.push(nf);ensureFunds();
     const p=num($("#fnP").value),ln=fundLineOf(nf.id);
     if(isFinite(p)&&p>0)for(let k=view.cycle;k<S.cycles.length;k++)
       (S.budgets[String(k)]||(S.budgets[String(k)]={}))[ln.id]=+p.toFixed(2);
     save();closeSheet();render();toast("Fund created");};
   if(f)$("#fnDel").onclick=()=>{
-    if(S.sav.some(x=>x.fund===f.id)){toast("This fund has history, so it can't be deleted. Rename it instead.");return;}
+    if(S.sav.some(x=>x.fund===f.id)){toast("This fund has history, so it can't be deleted. Move its money out first, or rename it.");return;}
     if(!confirm("Delete the fund “"+f.name+"”?"))return;
     const ln=fundLineOf(f.id);
     S.funds=S.funds.filter(x=>x.id!==f.id);
     if(ln){S.lines=S.lines.filter(x=>x.id!==ln.id);for(const k in S.budgets)delete S.budgets[k][ln.id];}
     save();closeSheet();render();toast("Deleted");};
+}
+
+/* in Add spending: picking a category a fund covers offers that fund */
+function suggestFund(sid){
+  if(view.mode!=="spend"||view.refund||!$("#fFund"))return;
+  const f=fundOf($("#fFund").value),hit=fundForSub(sid);
+  if(hit&&fundBal(hit.id)>0){$("#fFund").value=hit.id;view.autoFund=hit.id;
+    $("#fundHint").textContent=subName(sid)+" is linked to "+hit.name+", so it's picked for you. Choose “No” to charge the plan instead.";}
+  else if(view.autoFund&&f&&view.autoFund===f.id){$("#fFund").value="";view.autoFund=null;
+    $("#fundHint").textContent="Pick a fund and the bill comes out of it. The plan isn't charged.";}
 }
 
 function openSetAside(fid,fromLine){
@@ -2480,6 +2646,10 @@ document.addEventListener("click",e=>{
   const t=e.target;
   if(t.closest("[data-close]"))return closeSheet();
   const ed=t.closest("[data-edit]");if(ed)return openEdit(ed.dataset.edit,ed.dataset.kind);
+  const af=t.closest("[data-applefunds]");if(af)return setTab("funds");
+  const am=t.closest("[data-addmoney]");if(am)return openAddMoney();
+  const mm=t.closest("[data-movemoney]");if(mm)return openMove();
+  const ea=t.closest("[data-editacct]");if(ea){const a0=appleAcc();return openAccount(a0?a0.id:"");}
   const fd=t.closest("[data-fund]");if(fd)return openFund(fd.dataset.fund);
   const nf=t.closest("[data-newfund]");if(nf)return openFundEdit();
   const ln=t.closest("[data-line]");if(ln)return openLine(ln.dataset.line);
