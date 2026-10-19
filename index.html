@@ -146,7 +146,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 .toast.on{opacity:1;pointer-events:auto}
 .toast button{color:#9FC4FF;font-weight:650}
 .banner{background:var(--warnbg);border:1px solid var(--warnline);color:var(--warnink);font-size:13px;padding:11px 13px;border-radius:10px;margin-top:12px}
-.planline{display:flex;align-items:center;gap:10px;padding:11px 15px;border-top:1px solid var(--line)}
+.planline{display:flex;align-items:center;gap:10px;padding:11px 15px;border-top:1px solid var(--line);width:100%;text-align:left}
 .planline:first-child{border-top:none}
 .planline .pl{flex:1;min-width:0}
 .planline .pl b{display:block;font-size:14.5px;font-weight:560}
@@ -239,6 +239,9 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
         <div class="f" id="wCard"><span>Paid with</span><div id="fCard"></div></div>
       </div>
       <div class="f" id="wRet"><span>Retailer</span><div id="fRet"></div></div>
+      <div class="f" id="wFund" style="display:none"><span>Pay from a fund</span>
+        <select class="inp" id="fFund"></select>
+        <div class="hint">Pick a fund and the bill comes out of it. The plan isn't charged.</div></div>
       <div class="f" id="wSavAcct"><span id="lblSavAcct">Savings account</span><div id="fSavAcct"></div></div>
       <label class="f"><span>Date</span>
         <div class="datewrap">
@@ -270,6 +273,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
   <section class="panel" id="p-pending"></section>
   <section class="panel" id="p-subs"></section>
   <section class="panel" id="p-bills"></section>
+  <section class="panel" id="p-funds"></section>
   <section class="panel" id="p-income"></section>
   <section class="panel" id="p-plan"></section>
   <section class="panel" id="p-log"></section>
@@ -359,6 +363,7 @@ function load(){
   if(S.settings.statsWin==null)S.settings.statsWin=0;   /* 0 = all time */
   S.carry=Object.assign({on:0,from:null},S.carry||{});
   S.labels=Object.assign({net:"Net worth",free:"Free to spend",sav:"Total savings"},S.labels||{});
+  ensureFunds();
   if(S.accountsV!==5){
     const keep=(S.accounts||[]).reduce((m,a)=>(m[a.name]=a,m),{});
     S.accountsV=5;
@@ -452,7 +457,15 @@ const money0=n=>S.settings.symbol+Math.round(Math.abs(n)).toLocaleString();
 
 const txIn=i=>S.tx.filter(t=>t.y===i);
 const incIn=i=>S.inc.filter(t=>t.y===i);
-const savIn=i=>S.sav.filter(t=>t.y===i);
+const savIn=i=>S.sav.filter(t=>t.y===i&&!t.fund);      /* fund moves are not "saved this cycle" */
+const planTx=i=>txIn(i).filter(t=>!t.fund);             /* spending paid out of a fund is not charged to the plan */
+const fundOf=id=>(S.funds||[]).find(f=>f.id===id);
+const fundBal=id=>cents(S.sav.filter(x=>x.fund===id).reduce((a,x)=>a+x.a,0));
+const fundLineOf=id=>S.lines.find(l=>l.kind==="fund"&&l.fund===id);
+const fundsTotal=()=>cents((S.funds||[]).reduce((a,f)=>a+fundBal(f.id),0));
+const fundPutIn=(i,id)=>cents(S.sav.filter(x=>x.fund===id&&x.y===i&&x.a>0).reduce((a,x)=>a+x.a,0));
+/* fund money pulled back to fund plan lines in cycle i: extra cash the plan can use */
+const fundBackIn=i=>cents(S.sav.filter(x=>x.fund&&x.y===i&&x.adj&&x.a<0).reduce((a,x)=>a-x.a,0));
 
 /* line matching */
 function lineMatches(l,t){
@@ -462,10 +475,11 @@ function lineMatches(l,t){
 }
 function planFor(i){
   const b=S.budgets[String(i)]||{};
-  const list=txIn(i), used=new Set();
+  const list=planTx(i), used=new Set();
   const out=S.lines.map(l=>{
     let spent=0;
     if(l.kind==="savings") spent=savIn(i).reduce((a,x)=>a+x.a,0);
+    else if(l.kind==="fund") spent=fundPutIn(i,l.fund);
     else for(const t of list){ if(used.has(t.id))continue; if(lineMatches(l,t)){spent+=t.a;used.add(t.id);} }
     const bud=b[l.id]||0;
     return {line:l,bud,spent,rem:cents(bud-spent)};
@@ -487,11 +501,11 @@ const openSheet=h=>{$("#sheetBody").innerHTML=h;$("#sheet").classList.add("on");
 const closeSheet=()=>$("#sheet").classList.remove("on");
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet();});
 function setTab(t){
-  const sub=(t==="history"||t==="subs"||t==="bills"||t==="income"||t==="setup");
-  if(sub&&!(view.tab==="history"||view.tab==="subs"||view.tab==="bills"||view.tab==="income"||view.tab==="setup"))view.from=view.tab;
+  const sub=(t==="history"||t==="subs"||t==="bills"||t==="income"||t==="setup"||t==="funds");
+  if(sub&&!(view.tab==="history"||view.tab==="subs"||view.tab==="bills"||view.tab==="income"||view.tab==="setup"||view.tab==="funds"))view.from=view.tab;
   view.tab=t;
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("on",p.id==="p-"+t));
-  const lit=(t==="subs"||t==="bills"||t==="income")?"pending":t==="history"?"stats":t;
+  const lit=(t==="subs"||t==="bills"||t==="income")?"pending":t==="history"?"stats":t==="funds"?"plan":t;
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===lit));
   render();window.scrollTo(0,0);}
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
@@ -565,14 +579,14 @@ const accKind=a=>({bank:"income, less spending and savings",pending:"charged, no
 function render(){
   const c=cyc(view.cycle),rel=view.cycle-nowCycle();
   const cycleTabs=(view.tab==="plan"||view.tab==="add"||(view.tab==="log"&&!view.byAdded&&(!view.range||view.range==="cycle")&&!(view.q||"").trim()));
-  const subPage=(view.tab==="history"||view.tab==="subs"||view.tab==="bills"||view.tab==="income"||view.tab==="setup");
+  const subPage=(view.tab==="history"||view.tab==="subs"||view.tab==="bills"||view.tab==="income"||view.tab==="setup"||view.tab==="funds");
   $("#cycleMeta").hidden=!cycleTabs;
   $("#prevCycle").hidden=!cycleTabs;
   $("#nextCycle").hidden=!cycleTabs;
   $("#backBtn").hidden=!subPage;
   $("#openSetup").hidden=view.tab==="setup";
   $("#pageTitle").hidden=cycleTabs;
-  $("#pageTitle").textContent={stats:"Home",history:"History",pending:"Pending",subs:"Subscriptions",bills:"Bills",income:"Income",setup:"Setup",log:view.byAdded?"Recently added":"Log"}[view.tab]||"";
+  $("#pageTitle").textContent={stats:"Home",history:"History",pending:"Pending",subs:"Subscriptions",bills:"Bills",income:"Income",funds:"Funds",setup:"Setup",log:view.byAdded?"Recently added":"Log"}[view.tab]||"";
   $("#cycleName").textContent=rel===0?"This cycle":rel===-1?"Last cycle":rel===1?"Next cycle":(rel<0?Math.abs(rel)+" cycles ago":"In "+rel+" cycles");
   $("#cycleDates").textContent=fmtShort(c.s)+" – "+fmtShort(c.e)+", "+dOf(c.e).getFullYear()+(rel!==0?"  ·  tap for now":"");
   $("#prevCycle").disabled=view.cycle<=0;
@@ -589,6 +603,7 @@ function render(){
   if(view.tab==="bills")renderBills();
   if(view.tab==="income")renderIncome();
   if(view.tab==="income")renderIncome();
+  if(view.tab==="funds")renderFunds();
   if(view.tab==="plan")renderPlan();
   if(view.tab==="log")renderLog();
   if(view.tab==="setup")renderSetup();
@@ -641,11 +656,12 @@ function lowWarning(){
 
 /* ---------- carry-over ---------- */
 function planTotals(i){
-  const b=S.budgets[String(i)]||{},list=txIn(i),used=new Set();
+  const b=S.budgets[String(i)]||{},list=planTx(i),used=new Set();
   let alloc=0,spent=0;
   for(const l of S.lines){
     alloc+=b[l.id]||0;
     if(l.kind==="savings"){spent+=sumOf(savIn(i));continue;}
+    if(l.kind==="fund"){spent+=fundPutIn(i,l.fund);continue;}
     for(const t of list){if(used.has(t.id))continue;if(lineMatches(l,t)){spent+=t.a;used.add(t.id);}}
   }
   return {alloc,spent};
@@ -1158,7 +1174,7 @@ function renderHome(){
   const open=!!view.accOpen;
   const accounts=`<div class="card flush">
       <button class="fold" data-fold="acc"><span>ACCOUNTS</span><span class="chev">${open?"Hide ▴":"Show ▾"}</span></button>
-      ${open?S.accounts.map(accRow).join("")+`
+      ${open?S.accounts.map(accRow).join("")+(S.funds.length?`<button class="row" data-tabjump="funds"><div class="main"><b>Funds</b><span>kept apart inside Apple Savings</span></div><div class="amt num sv">${money(fundsTotal())}</div></button>`:"")+`
         <div class="row" style="background:var(--soft)"><div class="main"><b>${esc(S.labels.sav)}</b></div><div class="amt num sv">${money(svTot)}</div></div>
         <div class="row" style="background:var(--soft)"><div class="main"><b>${esc(S.labels.net)}</b><span>checking plus savings</span></div><div class="amt num">${money(bank+svTot)}</div></div>`
       :`<button class="row" data-fold="acc"><div class="main"><b>Checking ${money(bank)} · Savings ${money(svTot)}</b>
@@ -1353,16 +1369,17 @@ function renderPlan(){
   const alloc=cents(budget);
   const gotIn=sumOf(incClearedIn(i)),pendIn=sumOf(incPendingIn(i));
   const toCome=toComeIn(i),expIn=cents(gotIn+pendIn+toCome);
-  const fromSav=savIncoming(),opening=openingBal(i);
+  const fromSav=savIncoming(),opening=openingBal(i),fundBack=fundBackIn(i);
   const spentClear=txIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const savedOut=savIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const pendOut=openBalance(),pre=preorders();
+  const fundPutOut=cents(S.sav.filter(x=>x.fund&&x.y===i&&x.a>0&&!x.p).reduce((a,x)=>a+x.a,0));
   /* the pot the plan draws on: what you started with plus everything coming in.
      spending is NOT subtracted here — the plan lines already measure it.
      money pulled out of savings is NOT added here either — a withdrawal is a
      negative budget on the Savings line, so it already lifts (cover - alloc).
      adding it twice was the old bug. */
-  const cover=cents(opening+gotIn+pendIn+toCome-pre),gap=cents(cover-alloc);
+  const cover=cents(opening+gotIn+pendIn+toCome-pre+fundBack),gap=cents(cover-alloc);
   const onHand=freeToSpend();
 
   if(cv==="plan"){
@@ -1377,16 +1394,23 @@ function renderPlan(){
     </div>`;
     const line=r=>{
       const w=r.bud>0?Math.min(100,r.spent/r.bud*100):(r.spent>0?100:0);
+      const isF=r.line.kind==="fund";
       const cls=r.rem>0?"good":r.rem<0?"over":"";
-      const tag=r.rem>0?"left":r.rem<0?"over":"nothing left";
-      return `<button class="planline" data-line="${r.line.id}">
-        <div class="pl"><b>${esc(r.line.name)}</b><span class="num">${money(r.spent)} of ${money(r.bud)}</span>
+      const tag=isF?(r.rem>0?"to set aside":r.rem<0?"extra":"set aside"):(r.rem>0?"left":r.rem<0?"over":"nothing left");
+      return `<button class="planline" ${isF?`data-fund="${r.line.fund}"`:`data-line="${r.line.id}"`}>
+        <div class="pl"><b>${esc(r.line.name)}</b><span class="num">${money(r.spent)} of ${money(r.bud)}${isF?" · balance "+money(fundBal(r.line.fund)):""}</span>
           <div class="catbar ${r.rem<0?"over":""}"><i style="width:${w}%"></i></div></div>
         <div class="pr num ${cls}">${money(Math.abs(r.rem))}<small>${tag}</small></div></button>`;};
     const F=view.folds||{};
-    const fixed=rows.filter(r=>isFixed(r.line)&&(r.bud||r.spent));
-    const flex=rows.filter(r=>!isFixed(r.line)&&(r.bud||r.spent));
-    const empty=rows.filter(r=>!r.bud&&!r.spent);
+    const isSF=r=>r.line.kind==="savings"||r.line.kind==="fund";
+    const showSF=r=>isSF(r)&&(r.bud||r.spent||(r.line.kind==="fund"&&fundBal(r.line.fund)>0));
+    const sfRows=rows.filter(showSF);
+    const fixed=rows.filter(r=>!isSF(r)&&isFixed(r.line)&&(r.bud||r.spent));
+    const flex=rows.filter(r=>!isSF(r)&&!isFixed(r.line)&&(r.bud||r.spent));
+    const empty=rows.filter(r=>!r.bud&&!r.spent&&!showSF(r));
+    const sfCard=`<div class="card flush"><div class="fold" style="cursor:default"><span>SAVINGS &amp; FUNDS</span>
+        <button type="button" data-tabjump="funds" style="color:var(--accent);font-size:13.5px;padding:2px 0">All funds ›</button></div>
+      ${sfRows.length?sfRows.map(line).join(""):`<div class="empty" style="padding:14px 16px">No savings or fund budget on this cycle.</div>`}</div>`;
     const fb=fixed.reduce((a,r)=>a+r.bud,0),fs=fixed.reduce((a,r)=>a+r.spent,0);
     const list=`<div class="card flush">
       ${fixed.length?`<button class="fold" data-fold="fixed"><span>FIXED · ${fixed.length} line${fixed.length===1?"":"s"}</span>
@@ -1405,7 +1429,7 @@ function renderPlan(){
         ? `<button class="btn sm ghost" data-matchall="${i}">Match the plan to what's spent — ${left>0?"drops":"raises"} it by ${money(Math.abs(left))}</button>`
         : ``}
       <div class="hint" style="margin:0">Tap a line to set its budget.</div></div>`;
-    $("#p-plan").innerHTML=seg+hero+list;return;
+    $("#p-plan").innerHTML=seg+hero+sfCard+list;return;
   }
 
   if(cv==="break"){
@@ -1471,6 +1495,7 @@ function renderPlan(){
         (()=>{const sc=scheduledIncome(i);return sc&&toCome<sc-0.005?"over":"in";})(),
         `data-expect="${i}"`)}
       ${pre?ln("Preorders",-pre):""}
+      ${fundBack?ln("Brought in from funds",fundBack,"set aside earlier, on its way back","sv"):""}
       <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>To cover the plan</b></div><div class="amt num">${money(cover)}</div></div>
     </div>
     <div class="card flush">
@@ -1478,6 +1503,7 @@ function renderPlan(){
       ${ln("Spent",-spentClear)}
       ${pendOut?ln("Charges not cleared",-pendOut,null,"over"):""}
       ${savedOut?ln("Put into savings",-savedOut,null,"sv"):""}
+      ${fundPutOut?ln("Set aside in funds",-fundPutOut,"kept apart inside Apple Savings","sv"):""}
       ${fromSav?ln("Coming out of savings",fromSav,"counted on the Savings plan line, not as extra cover","sv"):""}
       <div class="row" style="background:var(--soft);padding:11px 15px"><div class="main"><b>Free to spend right now</b>
         <span>checking less pending</span></div><div class="amt num ${onHand<0?"over":onHand>0?"good":""}">${money(onHand)}</div></div>
@@ -1488,7 +1514,7 @@ function renderPlan(){
       <button class="btn sm ghost" data-carry="${i}">Opening balance ${money(opening)} — adjust</button>
       ${gap<0?`<button class="btn sm ghost" data-pullsav="${Math.abs(gap).toFixed(2)}" style="color:var(--save);border-color:var(--save)">Cover the ${money(Math.abs(gap))} from savings</button>`:""}
     </div>`;
-  const inc=incIn(i).sort((a,b)=>a.d<b.d?1:-1),sv=savIn(i).sort((a,b)=>a.d<b.d?1:-1);
+  const inc=incIn(i).sort((a,b)=>a.d<b.d?1:-1),sv=S.sav.filter(t=>t.y===i).sort((a,b)=>a.d<b.d?1:-1);
   const money2=`<div class="card flush">
     <div class="daylabel" style="border-top:none">Money in</div>
     ${inc.length?inc.map(e=>`<button class="row" data-edit="${e.id}" data-kind="inc"><div class="main"><b>${esc(e.n)}</b><span>${fmtShort(e.d)}</span></div><div class="amt in num">${money(e.a,true)}</div></button>`).join(""):`<div class="empty" style="padding:16px">No income this cycle.</div>`}
@@ -1702,6 +1728,10 @@ function setMode(m){
   $("#lblName").textContent=m==="spend"?"Item name":m==="income"?"From":"Note (optional)";
   $("#fName").placeholder=m==="spend"?"e.g. Bounty Hunter Funko":m==="income"?"e.g. Raytheon":"e.g. Apple Savings";
   for(const el of ["wCat","wRet","wCard"]) $("#"+el).style.display=m==="spend"?"":"none";
+  {const fs=S.funds||[],cur=$("#fFund").value;
+   $("#wFund").style.display=(m==="spend"&&fs.length&&!view.refund)?"":"none";
+   $("#fFund").innerHTML='<option value="">No, normal spending</option>'+fs.map(f=>`<option value="${f.id}">${esc(f.name)} · ${money(fundBal(f.id))}</option>`).join("");
+   $("#fFund").value=cur&&fundOf(cur)?cur:"";}
   $("#wSavAcct").style.display=m==="save"?"":"none";
   $("#lblSavAcct").textContent=view.wdraw?"Take it out of":"Put it into";
   $("#wCatCard").style.display=m==="spend"?"":"none";
@@ -1761,7 +1791,9 @@ $("#saveEntry").onclick=()=>{
   if(view.mode==="spend")delta=view.refund?a:-a;
   else if(view.mode==="income")delta=a;
   else delta=view.wdraw?a:-a;
-  if(delta<0){
+  const payFund=(view.mode==="spend"&&!view.refund&&$("#fFund").value)||"";
+  if(payFund&&a>fundBal(payFund)+0.005&&!confirm("That's more than the "+money(fundBal(payFund))+" in "+fundOf(payFund).name+". Pay it from the fund anyway?"))return;
+  if(delta<0&&!payFund){
     const after=freeToSpend()+delta,f=floorOf();
     if(after<f&&!confirm("That leaves "+money(after)+(f?" against your "+money(f)+" cushion":" in checking")+
        ".\n\nAdd it anyway?"))return;
@@ -1771,6 +1803,9 @@ $("#saveEntry").onclick=()=>{
     const rec={id:uid("t"),ts:Date.now(),d:view.date,n:n||subName(sid),a:+amt.toFixed(2),s:sid,
                r:retIdFor(cRet.text),k:cCard.id||(S.cards[0]||{}).id,y};
     if(view.pend)rec.p=1;
+    if(payFund){rec.fund=payFund;
+      const mv=takeFromFund(payFund,Math.abs(amt),view.date,{note:"Paid "+rec.n});
+      mv.fl=rec.id;rec.fl=mv.id;}
     S.tx.push(rec);
     if(view.favThis){addFav(rec);view.favThis=false;$("#favThis").classList.remove("on");$("#favThis").textContent="♡";}
   } else if(view.mode==="income") S.inc.push({id:uid("i"),ts:Date.now(),d:view.date,n:n||"Income",a:+a.toFixed(2),y});
@@ -1783,7 +1818,7 @@ $("#saveEntry").onclick=()=>{
     if(view.pend)rec.p=1;
     S.sav.push(rec);
   }
-  save();$("#fAmount").value="";$("#fName").value="";
+  save();$("#fAmount").value="";$("#fName").value="";$("#fFund").value="";
   view.cycle=y;
   toast(view.mode==="spend"&&view.refund?"Refund of "+money(a)+" logged"
        :view.mode==="save"&&view.wdraw?money(a)+" taken out of savings":"Added "+money(a));
@@ -1892,19 +1927,22 @@ function openEdit(id,kind){
   }
   $("#eSave").onclick=()=>{
     const a=num($("#eA").value); if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
+    const oldA=Math.abs(rec.a),oldY=rec.y;
     rec.a=+a.toFixed(2); rec.n=$("#eN").value.trim()||rec.n;
     if($("#eD").value){rec.d=$("#eD").value;rec.y=cycleFor(rec.d);}
     if(kind==="inc"){if(rec._ip)rec.p=1;else delete rec.p; delete rec._ip;}
     if(kind==="sav"){rec.a=rec._w?-Math.abs(rec.a):Math.abs(rec.a);
-      if(rec._sp)rec.p=1;else delete rec.p; delete rec._w;delete rec._sp;}
+      if(rec._sp)rec.p=1;else delete rec.p; delete rec._w;delete rec._sp;
+      if(rec.adj){const r=oldA?Math.abs(rec.a)/oldA:1;
+        for(const x of rec.adj){bumpBudget(oldY,x.l,-x.a);x.a=cents(x.a*r);bumpBudget(rec.y,x.l,x.a);}}}
     if(kind==="tx"){rec.s=eCat.id||rec.s;rec.r=retIdFor(eRet.text);rec.k=eCard.id||rec.k;
       rec.a=rec._f?-Math.abs(rec.a):Math.abs(rec.a);
       if(rec._p)rec.p=1;else delete rec.p;
       delete rec._f;delete rec._p;}
     save();closeSheet();render();toast("Saved");};
   $("#eDel").onclick=()=>{
-    const i=arr.indexOf(rec);arr.splice(i,1);save();closeSheet();render();
-    undoToast("Deleted “"+(rec.n||"entry")+"”",()=>{arr.splice(Math.min(i,arr.length),0,rec);save();render();});};
+    const undo=removeWithLinks(rec,kind,arr);save();closeSheet();render();
+    undoToast("Deleted “"+(rec.n||"entry")+"”",()=>{undo();save();render();});};
 }
 
 /* ---------- plan line budget ---------- */
@@ -1913,6 +1951,7 @@ function openLine(lid){
   const b=S.budgets[String(i)]||(S.budgets[String(i)]={});
   const {rows}=planFor(i),row=rows.find(r=>r.line.id===lid);
   const covers=l.kind==="savings"?"Everything you move to savings"
+    :l.kind==="fund"?"Money you set aside in this fund"
     :l.kind==="group"?"Everything in "+(byId(S.groups,l.g)||{name:"?"}).name
     :l.subs.map(subName).join(", ");
   /* what the whole cycle has to work with, and what's left unallocated */
@@ -1920,7 +1959,7 @@ function openLine(lid){
   const gotIn=sumOf(incClearedIn(i)),pendIn=sumOf(incPendingIn(i));
   const toCome=toComeIn(i),expIn=cents(gotIn+pendIn+toCome);
   /* savings withdrawals are not added here — see the note in renderPlan */
-  const cover=cents(opening+gotIn+pendIn+toCome-preorders());
+  const cover=cents(opening+gotIn+pendIn+toCome-preorders()+fundBackIn(i));
   const allocOther=cents(rows.reduce((a,r)=>a+r.bud,0)-row.bud);
   const freeToAllocate=cents(cover-allocOther);
   const isSav=l.kind==="savings";
@@ -1949,7 +1988,8 @@ function openLine(lid){
     <button class="btn" id="lSave">Save budget</button>
     ${row.spent||row.bud?`<button class="btn sm ghost" id="lMatch">Match what's spent · ${money(row.spent)}</button>`:""}
     <button class="btn sm ghost" id="lUseAll">Use all ${money(Math.max(0,freeToAllocate))}</button>
-    <button class="btn sm ghost" id="lAll">Use this amount for every later cycle</button>`);
+    <button class="btn sm ghost" id="lAll">Use this amount for every later cycle</button>
+    ${l.kind==="subs"||l.kind==="group"?`<button class="btn sm ghost" id="lSet" style="color:var(--save);border-color:var(--save)">Set some of this aside in a fund</button>`:""}`);
   const val=()=>{const v=num($("#lB").value);
     if(!isFinite(v)||Math.abs(v)<=0)return 0;
     const a=+Math.abs(v).toFixed(2);
@@ -1986,6 +2026,7 @@ function openLine(lid){
         x.classList.toggle("on",(x.dataset.savdir==="out")===(savDir<0));}
     syncHint();
   };
+  const lset=$("#lSet");if(lset)lset.onclick=()=>openSetAside(null,lid);
   $("#lSave").onclick=()=>{b[lid]=val();save();closeSheet();render();toast("Budget saved");};
   $("#lAll").onclick=()=>{const v=val();
     for(let k=i;k<S.cycles.length;k++){S.budgets[String(k)]=S.budgets[String(k)]||{};S.budgets[String(k)][lid]=v;}
@@ -2048,7 +2089,7 @@ function openList(kind,opts){
           subsOfCat(c.id).map(s=>`<button class="row sub" data-item="sub:${s.id}" data-st="${esc((s.name+" "+c.name+" "+g.name).toLowerCase())}"><div class="main"><b>${esc(s.name)}</b></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("");
       }).join("")).join("");
   } else if(kind==="line"){
-    body=S.lines.map(l=>`<button class="row" data-item="line:${l.id}"><div class="main"><b>${esc(l.name)}</b><span>${l.kind==="savings"?"Savings":l.kind==="group"?"Group: "+(byId(S.groups,l.g)||{name:"?"}).name:l.subs.length+" sub-categories"}</span></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("");
+    body=S.lines.map(l=>`<button class="row" data-item="line:${l.id}"><div class="main"><b>${esc(l.name)}</b><span>${l.kind==="savings"?"Savings":l.kind==="fund"?"Fund":l.kind==="group"?"Group: "+(byId(S.groups,l.g)||{name:"?"}).name:l.subs.length+" sub-categories"}</span></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("");
   } else {
     const arr=kind==="ret"?S.retailers:S.cards,pfx=kind==="ret"?"ret":"card";
     body=arr.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(x=>`<button class="row" data-item="${pfx}:${x.id}" data-st="${esc(x.name.toLowerCase())}"><div class="main"><b>${esc(x.name)}</b></div><div class="amt" style="color:var(--faint);font-weight:400">›</div></button>`).join("");
@@ -2202,7 +2243,7 @@ function openLineEdit(id){
       <div class="seg"><button type="button" id="lfFixed" class="${l&&isFixed(l)?"on":""}">Fixed bill</button>
         <button type="button" id="lfFlex" class="${l&&!isFixed(l)?"on":(l?"":"on")}">Flexible</button></div>
       <div class="hint">Fixed lines fold into one summary row on the Cycle page.</div></div>
-    ${l&&l.kind!=="subs"?`<div class="hint" style="margin-top:10px">This line covers ${l.kind==="savings"?"savings transfers":"the whole "+(byId(S.groups,l.g)||{name:"?"}).name+" group"}, so it has no sub-category list.</div>`
+    ${l&&l.kind!=="subs"?`<div class="hint" style="margin-top:10px">This line covers ${l.kind==="savings"?"savings transfers":l.kind==="fund"?"money set aside in this fund":"the whole "+(byId(S.groups,l.g)||{name:"?"}).name+" group"}, so it has no sub-category list.</div>`
       :`<div style="margin-top:14px"><span class="hint">Counts spending in these sub-categories</span>
         <div class="card flush" style="margin-top:6px;max-height:44vh;overflow:auto">${picker}</div></div>`}
     <button class="btn" id="iSave">${l?"Save":"Add line"}</button>
@@ -2213,14 +2254,225 @@ function openLineEdit(id){
   $("#iSave").onclick=()=>{
     const n=$("#iN").value.trim(); if(!n){toast("Give it a name");return;}
     const picks=[...document.querySelectorAll(".lsub:checked")].map(x=>x.value);
-    if(l){l.name=n;l.fixed=fx?1:0; if(l.kind==="subs")l.subs=picks;}
+    if(l){l.name=n;l.fixed=fx?1:0; if(l.kind==="subs")l.subs=picks; if(l.kind==="fund"){const fo=fundOf(l.fund);if(fo)fo.name=n;}}
     else S.lines.push({id:uid("p"),name:n,kind:"subs",subs:picks,fixed:fx?1:0});
     save();closeSheet();openList("line");render();toast("Saved");};
   if(l)$("#iDel").onclick=()=>{
+    if(l.kind==="fund"){toast("Delete the fund from the Funds page instead");return;}
     if(!confirm("Delete this plan line? Its budget amounts go with it."))return;
     S.lines=S.lines.filter(x=>x.id!==id);
     for(const k in S.budgets)delete S.budgets[k][id];
     save();closeSheet();openList("line");render();toast("Deleted");};
+}
+
+/* ---------- funds ---------- */
+/* A fund is a named pot kept inside Apple Savings (so it earns interest with the
+   rest of it) but apart from the cycle's own Savings line. Every move in or out
+   is an ordinary savings transfer carrying fund:<id>, so checking and the Apple
+   Savings balance stay right with no new maths. savIn() skips these transfers,
+   so they never count as "saved this cycle".
+   adj on a transfer lists the plan-budget moves it caused ({l:line,a:amount},
+   in the transfer's own cycle) so deleting or resizing it can undo them.
+   fl links a transfer to the spending entry it paid for. */
+function ensureFunds(){
+  S.funds=S.funds||[];
+  for(const f of S.funds)
+    if(!S.lines.some(l=>l.kind==="fund"&&l.fund===f.id))
+      S.lines.push({id:"pf"+f.id,name:f.name,kind:"fund",fund:f.id,fixed:0});
+}
+function bumpBudget(y,lid,d){
+  const b=S.budgets[String(y)]||(S.budgets[String(y)]={});
+  b[lid]=cents((b[lid]||0)+d);
+}
+/* money into a fund. o.from: a plan line id (its budget moves to the fund line),
+   "extra" (the fund line's budget just grows) or nothing (already planned). */
+function putInFund(fid,amt,d,o){
+  o=o||{};
+  const f=fundOf(fid),y=cycleFor(d),fl=fundLineOf(fid),a=cents(amt);
+  const rec={id:uid("v"),ts:Date.now(),d,n:f.name,a,y,fund:fid};
+  if(o.note)rec.note=o.note;
+  if(o.pend)rec.p=1;
+  if(o.from&&fl){
+    rec.adj=[];
+    if(o.from!=="extra"){bumpBudget(y,o.from,-a);rec.adj.push({l:o.from,a:-a});}
+    bumpBudget(y,fl.id,a);rec.adj.push({l:fl.id,a});
+  }
+  S.sav.push(rec);return rec;
+}
+/* money out of a fund. o.to: a plan line id whose budget grows by the amount.
+   It always sits in Pending until the transfer lands in checking. */
+function takeFromFund(fid,amt,d,o){
+  o=o||{};
+  const f=fundOf(fid),y=cycleFor(d),a=cents(amt);
+  const rec={id:uid("v"),ts:Date.now(),d,n:f.name,a:-a,y,fund:fid,p:1};
+  if(o.note)rec.note=o.note;
+  if(o.to){bumpBudget(y,o.to,a);rec.adj=[{l:o.to,a}];}
+  S.sav.push(rec);return rec;
+}
+/* remove an entry along with what it set in motion; returns an undo function */
+function removeWithLinks(rec,kind,arr){
+  const undo=[];
+  const i=arr.indexOf(rec);arr.splice(i,1);
+  undo.push(()=>arr.splice(Math.min(i,arr.length),0,rec));
+  if(kind==="sav"&&rec.adj)for(const x of rec.adj){
+    bumpBudget(rec.y,x.l,-x.a);undo.push(()=>bumpBudget(rec.y,x.l,x.a));}
+  const other=kind==="sav"?S.tx:S.sav;
+  if(rec.fl){const j=other.findIndex(x=>x.id===rec.fl);
+    if(j>=0){const o=other.splice(j,1)[0];undo.push(()=>other.splice(Math.min(j,other.length),0,o));}}
+  return()=>{for(let k=undo.length-1;k>=0;k--)undo[k]();};
+}
+const dateInCycle=i=>{const c=cyc(i),t=todayIso();return t<c.s?c.s:t>c.e?c.e:t;};
+const spendLines=()=>S.lines.filter(l=>l.kind==="subs"||l.kind==="group");
+
+function renderFunds(){
+  const fs=S.funds,tot=fundsTotal(),i=view.cycle;
+  const hero=`<div class="card"><h2>In funds</h2>
+    <div class="meter-amt num" style="color:var(--save)">${money(tot)}</div>
+    <div class="meter-sub">Kept inside Apple Savings, so it earns interest. It isn't counted as saved this cycle.</div></div>`;
+  const row=f=>{
+    const bal=fundBal(f.id),pct=f.target>0?Math.max(0,Math.min(100,bal/f.target*100)):0;
+    const sub=f.target>0?money(bal)+" of "+money(f.target)+(f.due?" · by "+fmtShort(f.due)+" "+dOf(f.due).getFullYear():""):"No goal amount";
+    const ln=fundLineOf(f.id),bud=ln?((S.budgets[String(i)]||{})[ln.id]||0):0;
+    return `<button class="row" data-fund="${f.id}"><div class="main"><b>${esc(f.name)}</b>
+      <span class="num">${sub}${bud?" · "+money(bud)+" planned this cycle":""}</span>
+      ${f.target>0?`<div class="bar" style="margin:8px 0 0;height:6px"><div class="fill" style="width:${pct}%"></div></div>`:""}</div>
+      <div class="amt num sv">${money(bal)}</div></button>`;};
+  $("#p-funds").innerHTML=hero+`<div class="card flush">${fs.length?fs.map(row).join("")
+      :`<div class="empty"><b>No funds yet</b>Make one for a goal or for big bills like car insurance.</div>`}</div>
+    <div class="card"><button class="btn" data-newfund="1">New fund</button>
+      <div class="hint" style="margin:8px 0 0">Tap a fund to put money in or use it.</div></div>`;
+}
+
+function openFund(fid){
+  const f=fundOf(fid);if(!f)return;
+  const bal=fundBal(fid),ln=fundLineOf(fid),i=view.cycle;
+  const bud=(S.budgets[String(i)]||{})[ln.id]||0,put=fundPutIn(i,fid);
+  const moves=S.sav.filter(x=>x.fund===fid).sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:(b.ts||0)-(a.ts||0)).slice(0,8);
+  const pct=f.target>0?Math.max(0,Math.min(100,bal/f.target*100)):0;
+  openSheet(`<div class="sheethead"><h3>${esc(f.name)}</h3>
+    <span class="hint" style="margin:0">in Apple Savings</span><button class="close" data-close>×</button></div>
+    <div class="card" style="margin-top:12px"><h2>Balance</h2>
+      <div class="meter-amt num" style="color:var(--save)">${money(bal)}</div>
+      ${f.target>0?`<div class="bar" style="margin:12px 0 6px"><div class="fill" style="width:${pct}%"></div></div>
+        <div class="legend"><span>Goal ${money(f.target)}${f.due?" · by "+fmtShort(f.due)+" "+dOf(f.due).getFullYear():""}</span>
+          <span>${bal>=f.target?"Reached":money(f.target-bal)+" to go"}</span></div>`:""}</div>
+    <div class="card flush">
+      <div class="row" style="padding:10px 15px"><div class="main"><b style="font-weight:480">Planned this cycle</b>
+        <span>${fmtShort(cyc(i).s)} – ${fmtShort(cyc(i).e)}</span></div><div class="amt num">${money(bud)}</div></div>
+      <div class="row" style="padding:10px 15px"><div class="main"><b style="font-weight:480">Set aside so far</b></div>
+        <div class="amt num sv">${money(put)}</div></div></div>
+    <button class="btn" id="fdPut">Set money aside</button>
+    <button class="btn sm ghost" id="fdUse">Use some of it</button>
+    <button class="btn sm ghost" id="fdBud">Plan an amount for each cycle</button>
+    <button class="btn sm ghost" id="fdEdit">Rename or change the goal</button>
+    <div class="hint" style="margin-top:12px">To pay a bill from this fund, log it on the Add tab and pick the fund under “Pay from a fund”.</div>
+    <div class="card flush" style="margin-top:12px">
+      <div class="daylabel" style="border-top:none">Recent moves</div>
+      ${moves.length?moves.map(x=>`<button class="row" data-edit="${x.id}" data-kind="sav"><div class="main"><b>${esc(x.note||(x.a<0?"Taken out":"Set aside"))}</b>
+        <span>${fmtShort(x.d)}${x.p?" · not landed":""}</span></div>
+        <div class="amt num sv" style="${x.a<0?"color:var(--over)":""}">${money(x.a,true)}</div></button>`).join("")
+        :`<div class="empty" style="padding:16px">Nothing in or out yet.</div>`}</div>`);
+  $("#fdPut").onclick=()=>openSetAside(fid);
+  $("#fdUse").onclick=()=>openFundUse(fid);
+  $("#fdBud").onclick=()=>openLine(ln.id);
+  $("#fdEdit").onclick=()=>openFundEdit(fid);
+}
+
+function openFundEdit(fid){
+  const f=fid?fundOf(fid):null;
+  openSheet(`<div class="sheethead"><h3>${f?"Edit fund":"New fund"}</h3><button class="close" data-close>×</button></div>
+    <label class="f"><span>Name</span><input class="inp" id="fnN" value="${f?esc(f.name):""}" placeholder="e.g. Bills Fund, Next cycle, Trip"></label>
+    <label class="f"><span>Goal amount (optional)</span><div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
+      <input class="num" id="fnT" type="text" inputmode="decimal" value="${f&&f.target?f.target:""}" placeholder="0.00"></div></label>
+    <label class="f"><span>Wanted by (optional)</span><input class="inp num" id="fnD" type="date" value="${f&&f.due?f.due:""}"></label>
+    ${f?"":`<label class="f"><span>Plan this much every cycle (optional)</span><div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
+      <input class="num" id="fnP" type="text" inputmode="decimal" placeholder="0.00"></div>
+      <div class="hint">Starts with the cycle you're looking at and carries into every later one.</div></label>`}
+    <button class="btn" id="fnSave">${f?"Save":"Create fund"}</button>
+    ${f?`<button class="btn sm danger" id="fnDel">Delete fund</button>`:""}`);
+  $("#fnSave").onclick=()=>{
+    const n=$("#fnN").value.trim();if(!n){toast("Give it a name");return;}
+    const t=num($("#fnT").value),d=$("#fnD").value;
+    if(f){
+      f.name=n;if(isFinite(t)&&t>0)f.target=+t.toFixed(2);else delete f.target;
+      if(d)f.due=d;else delete f.due;
+      const ln=fundLineOf(f.id);if(ln)ln.name=n;
+      for(const x of S.sav)if(x.fund===f.id)x.n=n;
+      save();closeSheet();render();toast("Saved");return;}
+    const nf={id:uid("fd"),name:n};
+    if(isFinite(t)&&t>0)nf.target=+t.toFixed(2);
+    if(d)nf.due=d;
+    S.funds.push(nf);ensureFunds();
+    const p=num($("#fnP").value),ln=fundLineOf(nf.id);
+    if(isFinite(p)&&p>0)for(let k=view.cycle;k<S.cycles.length;k++)
+      (S.budgets[String(k)]||(S.budgets[String(k)]={}))[ln.id]=+p.toFixed(2);
+    save();closeSheet();render();toast("Fund created");};
+  if(f)$("#fnDel").onclick=()=>{
+    if(S.sav.some(x=>x.fund===f.id)){toast("This fund has history, so it can't be deleted. Rename it instead.");return;}
+    if(!confirm("Delete the fund “"+f.name+"”?"))return;
+    const ln=fundLineOf(f.id);
+    S.funds=S.funds.filter(x=>x.id!==f.id);
+    if(ln){S.lines=S.lines.filter(x=>x.id!==ln.id);for(const k in S.budgets)delete S.budgets[k][ln.id];}
+    save();closeSheet();render();toast("Deleted");};
+}
+
+function openSetAside(fid,fromLine){
+  if(!S.funds.length){toast("Make a fund first");openFundEdit();return;}
+  const i=view.cycle,{rows}=planFor(i);
+  const remOf=lid=>{const r=rows.find(x=>x.line.id===lid);return r?r.rem:0;};
+  const cur=fid||S.funds[0].id;
+  const flc=fundLineOf(cur),planned=flc?Math.max(0,remOf(flc.id)):0;
+  const first=fromLine||(planned>0?"plan":"extra");
+  const amt0=fromLine?Math.max(0,remOf(fromLine)):planned;
+  openSheet(`<div class="sheethead"><h3>Set money aside</h3>
+    <span class="hint" style="margin:0">moves to Apple Savings</span><button class="close" data-close>×</button></div>
+    <label class="f"><span>Into</span><select class="inp" id="saF">
+      ${S.funds.map(f=>`<option value="${f.id}" ${f.id===cur?"selected":""}>${esc(f.name)} · ${money(fundBal(f.id))}</option>`).join("")}</select></label>
+    <label class="f"><span>Amount</span><div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
+      <input class="num" id="saA" type="text" inputmode="decimal" value="${amt0>0?amt0.toFixed(2):""}" placeholder="0.00"></div></label>
+    <label class="f"><span>Where it comes from</span><select class="inp" id="saS">
+      <option value="plan">Already planned for this fund (${money(planned)} left)</option>
+      ${spendLines().map(l=>`<option value="${l.id}">Take it from ${esc(l.name)} (${money(Math.max(0,remOf(l.id)))} left)</option>`).join("")}
+      <option value="extra">Extra, not from a plan line</option></select>
+      <div class="hint">Taking it from a line lowers that line's budget and raises the fund's, so the plan still adds up.</div></label>
+    <label class="f"><span>Date</span><input class="inp num" id="saD" type="date" value="${dateInCycle(i)}"></label>
+    <div class="chips" style="margin-top:14px"><button type="button" class="chip" id="saP">✓ Transfer landed</button></div>
+    <button class="btn" id="saGo">Set it aside</button>`);
+  $("#saS").value=first;
+  let pend=false;
+  $("#saP").onclick=()=>{pend=!pend;$("#saP").classList.toggle("on",pend);
+    $("#saP").textContent=pend?"⏳ Transfer not landed":"✓ Transfer landed";};
+  $("#saGo").onclick=()=>{
+    const a=num($("#saA").value);
+    if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
+    const id=$("#saF").value,src=$("#saS").value,d=$("#saD").value||todayIso();
+    const l=src==="plan"||src==="extra"?null:byId(S.lines,src);
+    if(l&&a>remOf(src)+0.005&&!confirm("That's more than the "+money(Math.max(0,remOf(src)))+" left on "+l.name+". Move it anyway?"))return;
+    putInFund(id,a,d,{pend:pend,from:src==="plan"?null:src,note:l?"From "+l.name:""});
+    save();closeSheet();view.cycle=cycleFor(d);render();
+    toast(money(a)+" set aside in "+fundOf(id).name);};
+}
+
+function openFundUse(fid){
+  const f=fundOf(fid),bal=fundBal(fid),i=view.cycle;
+  openSheet(`<div class="sheethead"><h3>Use ${esc(f.name)}</h3>
+    <span class="hint" style="margin:0">${money(bal)} in it</span><button class="close" data-close>×</button></div>
+    <label class="f"><span>Amount</span><div class="money-in sm"><i>${esc(S.settings.symbol)}</i>
+      <input class="num" id="fuA" type="text" inputmode="decimal" value="${bal>0?bal.toFixed(2):""}" placeholder="0.00"></div></label>
+    <label class="f"><span>Put it into</span><select class="inp" id="fuL">
+      ${spendLines().map(l=>`<option value="${l.id}">${esc(l.name)} on this cycle's plan</option>`).join("")}
+      <option value="">Nothing on the plan, just move it back to checking</option></select></label>
+    <label class="f"><span>Date</span><input class="inp num" id="fuD" type="date" value="${dateInCycle(i)}"></label>
+    <div class="hint">The transfer sits in Pending until it lands in checking. The plan change goes into the cycle the date falls in.</div>
+    <button class="btn" id="fuGo">Take it out</button>`);
+  $("#fuGo").onclick=()=>{
+    const a=num($("#fuA").value);
+    if(!isFinite(a)||a<=0){toast("Enter an amount above zero");return;}
+    if(a>bal+0.005&&!confirm("That's more than the "+money(bal)+" in this fund. Take it out anyway?"))return;
+    const lid=$("#fuL").value,d=$("#fuD").value||todayIso(),l=lid?byId(S.lines,lid):null;
+    takeFromFund(fid,a,d,{to:lid||null,note:l?"To "+l.name:""});
+    save();closeSheet();view.cycle=cycleFor(d);render();
+    toast(money(a)+" coming out of "+f.name);};
 }
 
 /* ---------- events ---------- */
@@ -2228,6 +2480,8 @@ document.addEventListener("click",e=>{
   const t=e.target;
   if(t.closest("[data-close]"))return closeSheet();
   const ed=t.closest("[data-edit]");if(ed)return openEdit(ed.dataset.edit,ed.dataset.kind);
+  const fd=t.closest("[data-fund]");if(fd)return openFund(fd.dataset.fund);
+  const nf=t.closest("[data-newfund]");if(nf)return openFundEdit();
   const ln=t.closest("[data-line]");if(ln)return openLine(ln.dataset.line);
   const lo=t.closest("[data-loose]");if(lo){view.fCard=null;view.fCat=null;view.fRet=null;setTab("log");return;}
   const li=t.closest("[data-list]");if(li)return openList(li.dataset.list);
@@ -2333,7 +2587,7 @@ document.addEventListener("click",e=>{
     case "doImport":$("#importFile").click();break;
     case "doReset":
       if(confirm("Throw away every change and go back to the data imported from your sheet?")){
-        S=JSON.parse(JSON.stringify(SEED));save();fillSelects();view.cycle=nowCycle();render();toast("Reset");}
+        S=JSON.parse(JSON.stringify(SEED));ensureFunds();save();fillSelects();view.cycle=nowCycle();render();toast("Reset");}
       break;
   }
 });
@@ -2356,7 +2610,7 @@ document.addEventListener("change",e=>{
   r.onload=()=>{try{const d=JSON.parse(r.result);
     if(!d.cycles||!d.subs)throw 0;
     if(!confirm("Replace everything on this device with the backup?"))return;
-    S=d;save();fillSelects();view.cycle=nowCycle();setDate(todayIso());render();toast("Backup restored");}
+    S=d;ensureFunds();save();fillSelects();view.cycle=nowCycle();setDate(todayIso());render();toast("Backup restored");}
     catch(err){toast("That file isn't a backup from this app");}};
   r.readAsText(f);e.target.value="";});
 
