@@ -1,6 +1,6 @@
 /* Cycle — offline service worker.
    Bump CACHE whenever you replace index.html so phones pick up the new version. */
-const CACHE = 'cycle-v56';
+const CACHE = 'cycle-v57';
 const SHELL = [
   './',
   './index.html',
