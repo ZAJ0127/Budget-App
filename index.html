@@ -288,6 +288,12 @@ html,body{overflow-x:clip;max-width:100%}
         <button type="button" class="chip" id="tRefund">↩ Money coming back</button>
         <button type="button" class="chip" id="tWithdraw">↩ Taking money out</button>
       </div>
+      <div class="chips" id="wIncSav" style="margin-top:14px">
+        <button type="button" class="chip" id="tToSav">Goes to Apple Savings</button>
+        <button type="button" class="chip" data-incq="Apple Savings Interest">+ Interest</button>
+        <button type="button" class="chip" data-incq="Apple Daily Cash">+ Daily Cash</button>
+      </div>
+      <div class="hint" id="incSavHint" style="display:none">Counts as income, lands in Apple Savings, and raises this cycle's Savings budget by the same amount. Checking doesn't change.</div>
       <div style="height:6px"></div>
     </div>
     <div style="height:84px"></div>
@@ -1795,6 +1801,10 @@ function setMode(m){
   $("#tRefund").style.display=m==="spend"?"":"none";
   $("#tPending").style.display=(m==="spend"||m==="save")?"":"none";
   $("#tWithdraw").style.display=m==="save"?"":"none";
+  $("#wIncSav").style.display=m==="income"?"":"none";
+  $("#incSavHint").style.display=(m==="income"&&view.toSav)?"":"none";
+  $("#tToSav").classList.toggle("on",!!view.toSav);
+  $("#tToSav").textContent=view.toSav?"✓ Goes to Apple Savings":"Goes to Apple Savings";
   $("#tWithdraw").classList.toggle("on",!!view.wdraw);
   $("#tPending").classList.toggle("on",!!view.pend);
   if(typeof syncPendChip==="function")syncPendChip();
@@ -1804,6 +1814,8 @@ function setMode(m){
   syncSaveLabel();
 }
 $("#tPending").onclick=()=>{view.pend=!view.pend;setMode(view.mode);};
+$("#tToSav").onclick=()=>{view.toSav=!view.toSav;setMode(view.mode);};
+document.querySelectorAll("[data-incq]").forEach(b=>b.onclick=()=>{view.toSav=true;$("#fName").value=b.dataset.incq;setMode(view.mode);$("#fAmount").focus();});
 function syncPendChip(){
   const m=view.mode;
   $("#tPending").textContent=m==="save"
@@ -1943,7 +1955,11 @@ $("#saveEntry").onclick=()=>{
       mv.fl=rec.id;rec.fl=mv.id;}
     S.tx.push(rec);
     if(view.favThis){addFav(rec);view.favThis=false;$("#favThis").classList.remove("on");$("#favThis").textContent="♡";}
-  } else if(view.mode==="income") S.inc.push({id:uid("i"),ts:Date.now(),d:view.date,n:n||"Income",a:+a.toFixed(2),y});
+  } else if(view.mode==="income"){
+    const r={id:uid("i"),ts:Date.now(),d:view.date,n:n||(view.toSav?"Apple Savings Interest":"Income"),a:+a.toFixed(2),y};
+    if(view.toSav)r.sv=1;
+    S.inc.push(r);if(r.sv)syncIncSav(r);
+  }
   else {
     const acct=(cSav&&cSav.text)||"";
     const rec={id:uid("v"),ts:Date.now(),d:view.date,
@@ -1957,7 +1973,9 @@ $("#saveEntry").onclick=()=>{
   view.cycle=y;
   toast(view.mode==="spend"&&view.refund?"Refund of "+money(a)+" logged"
        :view.mode==="save"&&view.wdraw?money(a)+" taken out of savings":"Added "+money(a));
-  view.refund=false;view.wdraw=false;view.pend=true;setMode(view.mode);render();
+  const wasSv=view.mode==="income"&&view.toSav;
+  view.refund=false;view.wdraw=false;view.pend=true;view.toSav=false;setMode(view.mode);render();
+  if(wasSv)toast("Added "+money(a)+" to Apple Savings and the Savings budget");
 };
 
 /* ---------- edit ---------- */
@@ -1985,6 +2003,7 @@ function openPartialRefund(rec){
   };
 }
 function openEdit(id,kind){
+  if(kind==="sav"){const r0=S.sav.find(x=>x.id===id);if(r0&&r0.iv&&S.inc.some(x=>x.id===r0.iv))return openEdit(r0.iv,"inc");}
   const arr=kind==="tx"?S.tx:kind==="inc"?S.inc:S.sav;
   const rec=arr.find(x=>x.id===id); if(!rec)return;
   openSheet(`<div class="sheethead"><h3>Edit ${kind==="tx"?"entry":kind==="inc"?"income":"savings"}</h3><button class="close" data-close>×</button></div>
@@ -1995,7 +2014,8 @@ function openEdit(id,kind){
     <div class="f"><span>Paid with</span><div id="eK"></div></div>`:""}
     <label class="f"><span>Date</span><input class="inp num" id="eD" type="date" value="${rec.d}"></label>
     ${kind==="inc"?`<div class="chips" style="margin-top:16px">
-      <button type="button" class="chip ${rec.p?"on":""}" id="eIp">${rec.p?"⏳ Not received":"✓ Received"}</button></div>`:""}
+      <button type="button" class="chip ${rec.p?"on":""}" id="eIp">${rec.p?"⏳ Not received":"✓ Received"}</button>
+      <button type="button" class="chip ${rec.sv?"on":""}" id="eSv">${rec.sv?"✓ Goes to Apple Savings":"Goes to Apple Savings"}</button></div>`:""}
     ${kind==="sav"?`<div class="chips" style="margin-top:16px">
       <button type="button" class="chip ${rec.a<0?"on":""}" id="eWd">${rec.a<0?"↩ Taken out":"Put away"}</button>
       <button type="button" class="chip ${rec.p?"on":""}" id="eSp">${rec.p?"⏳ Not landed":"✓ Landed"}</button></div>`:""}
@@ -2022,6 +2042,10 @@ function openEdit(id,kind){
     $("#eIp").onclick=()=>{ip=!ip;$("#eIp").classList.toggle("on",ip);
       $("#eIp").textContent=ip?"⏳ Not received":"✓ Received";rec._ip=ip;};
     rec._ip=ip;
+    let sv=!!rec.sv;
+    $("#eSv").onclick=()=>{sv=!sv;$("#eSv").classList.toggle("on",sv);
+      $("#eSv").textContent=sv?"✓ Goes to Apple Savings":"Goes to Apple Savings";rec._sv=sv;};
+    rec._sv=sv;
   }
   if(kind==="sav"){
     let sp=!!rec.p;
@@ -2065,7 +2089,8 @@ function openEdit(id,kind){
     const oldA=Math.abs(rec.a),oldY=rec.y;
     rec.a=+a.toFixed(2); rec.n=$("#eN").value.trim()||rec.n;
     if($("#eD").value){rec.d=$("#eD").value;rec.y=cycleFor(rec.d);}
-    if(kind==="inc"){if(rec._ip)rec.p=1;else delete rec.p; delete rec._ip;}
+    if(kind==="inc"){if(rec._ip)rec.p=1;else delete rec.p; delete rec._ip;
+      if(rec._sv)rec.sv=1;else delete rec.sv; delete rec._sv; syncIncSav(rec);}
     if(kind==="sav"){rec.a=rec._w?-Math.abs(rec.a):Math.abs(rec.a);
       if(rec._sp)rec.p=1;else delete rec.p; delete rec._w;delete rec._sp;
       if(rec.adj){const r=oldA?Math.abs(rec.a)/oldA:1;
@@ -2464,6 +2489,21 @@ function bumpBudget(y,lid,d){
   const b=S.budgets[String(y)]||(S.budgets[String(y)]={});
   b[lid]=cents((b[lid]||0)+d);
 }
+/* income that goes straight to Apple Savings (interest, Daily Cash). it counts as
+   income, and is mirrored by a linked savings entry so checking stays put. the
+   Savings line budget rises by the same amount (kept in adj like other moves). */
+function syncIncSav(inc){
+  const i=S.sav.findIndex(x=>x.iv===inc.id),cur=i>=0?S.sav[i]:null;
+  const line=S.lines.find(l=>l.kind==="savings");
+  if(cur)for(const x of cur.adj||[])bumpBudget(cur.y,x.l,-x.a);
+  if(!inc.sv){if(cur)S.sav.splice(i,1);return;}
+  const rec=cur||{id:uid("v"),ts:Date.now(),iv:inc.id};
+  rec.d=inc.d;rec.n=inc.n;rec.a=inc.a;rec.y=inc.y;
+  if(inc.p)rec.p=1;else delete rec.p;
+  rec.adj=line?[{l:line.id,a:inc.a}]:[];
+  for(const x of rec.adj)bumpBudget(rec.y,x.l,x.a);
+  if(!cur)S.sav.push(rec);
+}
 /* money into a fund. o.from: a plan line id (its budget moves to the fund line),
    "extra" (the fund line's budget just grows) or nothing (already planned). */
 function putInFund(fid,amt,d,o){
@@ -2497,6 +2537,11 @@ function removeWithLinks(rec,kind,arr){
   if(kind==="sav"&&rec.adj)for(const x of rec.adj){
     bumpBudget(rec.y,x.l,-x.a);undo.push(()=>bumpBudget(rec.y,x.l,x.a));}
   const other=kind==="sav"?S.tx:S.sav;
+  if(kind==="inc"&&rec.sv){const j=S.sav.findIndex(x=>x.iv===rec.id);
+    if(j>=0){const o=S.sav.splice(j,1)[0];for(const x of o.adj||[])bumpBudget(o.y,x.l,-x.a);
+      undo.push(()=>{S.sav.splice(Math.min(j,S.sav.length),0,o);for(const x of o.adj||[])bumpBudget(o.y,x.l,x.a);});}}
+  if(kind==="sav"&&rec.iv){const j=S.inc.findIndex(x=>x.id===rec.iv);
+    if(j>=0){const o=S.inc.splice(j,1)[0];undo.push(()=>S.inc.splice(Math.min(j,S.inc.length),0,o));}}
   if(rec.mv){for(let j=S.sav.length-1;j>=0;j--){const o=S.sav[j];
     if(o!==rec&&o.mv===rec.mv){S.sav.splice(j,1);undo.push(()=>S.sav.splice(Math.min(j,S.sav.length),0,o));}}}
   if(kind==="sav"&&rec.out){const ac=byId(S.accounts,rec.out);
@@ -2878,7 +2923,7 @@ document.addEventListener("click",e=>{
     return;}
   const cin=t.closest("[data-clearinc]");if(cin){
     const rec=S.inc.find(x=>x.id===cin.dataset.clearinc);
-    if(rec){delete rec.p;save();render();undoToast(money(rec.a)+" received",()=>{rec.p=1;save();render();});}
+    if(rec){delete rec.p;if(rec.sv)syncIncSav(rec);save();render();undoToast(money(rec.a)+" received",()=>{rec.p=1;if(rec.sv)syncIncSav(rec);save();render();});}
     return;}
   const cs=t.closest("[data-clearsav]");if(cs){
     const rec=S.sav.find(x=>x.id===cs.dataset.clearsav);
