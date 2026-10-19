@@ -471,7 +471,7 @@ const fundsCleared=()=>cents(S.sav.filter(x=>x.fund&&!x.p).reduce((a,x)=>a+x.a,0
 const unalloc=()=>cents(appleTotal()-fundsCleared());
 const emergMin=f=>f.emerg?cents((f.emerg.months||6)*(f.emerg.monthly||0)):0;
 const fundForSub=sid=>(S.funds||[]).find(f=>f.offer!==false&&(f.cats||[]).includes(sid));
-const fundPutIn=(i,id)=>cents(S.sav.filter(x=>x.fund===id&&x.y===i&&x.a>0).reduce((a,x)=>a+x.a,0));
+const fundPutIn=(i,id)=>cents(S.sav.filter(x=>x.fund===id&&x.y===i&&x.a>0&&!x.mv).reduce((a,x)=>a+x.a,0));
 /* fund money pulled back to fund plan lines in cycle i: extra cash the plan can use */
 const fundBackIn=i=>cents(S.sav.filter(x=>x.fund&&x.y===i&&x.adj&&x.a<0).reduce((a,x)=>a-x.a,0));
 
@@ -1381,7 +1381,7 @@ function renderPlan(){
   const spentClear=txIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const savedOut=savIn(i).filter(t=>!t.p).reduce((a,t)=>a+t.a,0);
   const pendOut=openBalance(),pre=preorders();
-  const fundPutOut=cents(S.sav.filter(x=>x.fund&&x.y===i&&x.a>0&&!x.p).reduce((a,x)=>a+x.a,0));
+  const fundPutOut=cents(S.sav.filter(x=>x.fund&&x.y===i&&x.a>0&&!x.p&&!x.mv).reduce((a,x)=>a+x.a,0));
   /* the pot the plan draws on: what you started with plus everything coming in.
      spending is NOT subtracted here — the plan lines already measure it.
      money pulled out of savings is NOT added here either — a withdrawal is a
