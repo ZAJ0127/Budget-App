@@ -196,6 +196,24 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
 .comboItem i{display:block;font-style:normal;font-size:11.5px;color:var(--faint);margin-top:1px}
 .comboItem.new{color:var(--accent);font-weight:560}
 .comboEmpty{padding:13px;color:var(--muted);font-size:14px}
+/* past-entry autofill */
+.acwrap{position:relative}
+.acList{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:45;background:var(--surface);
+  border:1px solid var(--line);border-radius:12px;max-height:300px;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;box-shadow:0 10px 28px rgba(20,27,38,.16)}
+.acHead{padding:9px 14px 5px;font-size:12px;font-weight:600;color:var(--muted)}
+.acItem{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:11px 14px;border-top:1px solid var(--line)}
+.acHead+.acItem{border-top:none}
+.acItem:active,.acItem.hl{background:var(--soft)}
+.acItem .main{flex:1;min-width:0}
+.acItem .main b{display:block;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acItem .main span,.acItem .r span{display:block;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acItem .r{flex:none;text-align:right}.acItem .r b{display:block;font-size:15px}.acItem .r span{font-size:11.5px}
+.acNew{display:block;width:100%;text-align:left;padding:12px 14px;border-top:1px solid var(--line);font-size:14px;color:var(--accent)}
+.filledbar{display:flex;align-items:center;gap:10px;margin-top:12px;padding:4px 4px 4px 12px;background:var(--soft);border-radius:10px;font-size:13.5px;color:var(--accent)}
+.filledbar span{flex:1;min-width:0}
+.filledbar button{color:var(--accent);font-weight:600;font-size:13.5px;min-height:40px;padding:0 10px}
+.inp.auto,.combo.auto .inp,.money-in.auto{background:color-mix(in srgb,var(--soft) 45%,var(--surface));border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.money-in.auto input{background:none}
 .searchwrap{position:relative}
 .searchwrap .inp{padding-right:38px}
 .searchwrap button{position:absolute;right:2px;top:2px;bottom:2px;width:34px;color:var(--muted);font-size:17px}
@@ -229,11 +247,15 @@ nav button.on::before{content:"";position:absolute;top:0;left:22%;right:22%;heig
         <button id="mSave">Savings</button>
       </div>
       <button class="btn sm ghost" id="openFavs" style="margin-top:0">♥ Favourites</button>
+      <div class="filledbar" id="filledBar" hidden><span id="filledMsg">Filled from last time</span>
+        <button type="button" id="filledClear">Clear all</button></div>
+      <div class="f" style="margin-top:14px"><label for="fName" id="lblName" style="display:block;font-size:13px;color:var(--muted);margin-bottom:5px">Item name</label>
+        <div class="acwrap"><input class="inp" id="fName" type="text" autocomplete="off" autocapitalize="words" placeholder="What did you buy?">
+          <div class="acList" id="acList" hidden></div></div>
+        <div class="hint" id="nameHint">Start typing — past items fill everything in.</div></div>
       <label class="f"><span id="lblAmount">Price</span>
-        <div class="money-in"><i>$</i><input class="num" id="fAmount" type="text" inputmode="decimal" placeholder="0.00"></div>
+        <div class="money-in" id="wAmount"><i>$</i><input class="num" id="fAmount" type="text" inputmode="decimal" placeholder="0.00"></div>
       </label>
-      <label class="f"><span id="lblName">Item name</span>
-        <input class="inp" id="fName" type="text" autocomplete="off" placeholder="e.g. Bounty Hunter Funko"></label>
       <div class="two" id="wCatCard">
         <div class="f" id="wCat"><span>Category</span><div id="fCat"></div></div>
         <div class="f" id="wCard"><span>Paid with</span><div id="fCard"></div></div>
@@ -521,13 +543,19 @@ document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()
 let cCat,cRet,cCard,cSav;
 function fillSelects(){
   const keep=[cCat&&cCat.id,cRet&&cRet.id,cCard&&cCard.id,cSav&&cSav.id];
-  cCat =combo($("#fCat"), catItems , {value:keep[0]||(S.subs[0]||{}).id, placeholder:"Type or pick a category",
+  cCat =combo($("#fCat"), catItems , {value:keep[0]||"", placeholder:"Pick one",
     allowNew:true, newLabel:"Add a new category called", onNew:(txt,pick)=>newCategoryFlow(txt,pick), onPick:id=>suggestFund(id)});
-  cRet =combo($("#fRet"), retItems , {value:keep[1]||"", allowNew:true, placeholder:"Type or pick a retailer"});
-  cSav =combo($("#fSavAcct"), savAcctItems, {value:keep[3]||(savAcctItems()[0]||{}).id,
-    allowNew:true, placeholder:"Type or pick an account"});
-  cCard=combo($("#fCard"),cardItems, {value:keep[2]||(S.cards[0]||{}).id, placeholder:"Type or pick"});
+  cRet =combo($("#fRet"), retItems , {value:keep[1]||"", allowNew:true, placeholder:"Pick or type one"});
+  cSav =combo($("#fSavAcct"), savAcctItems, {value:keep[3]||"",
+    allowNew:true, placeholder:"Pick or type an account"});
+  cCard=combo($("#fCard"),cardItems, {value:keep[2]||"", placeholder:"Pick one"});
 }
+/* changing a field that autofill tinted means it's yours now (bound once; the
+   combos rebuild their insides, so listen on the wrappers) */
+for(const id of ["fCat","fRet","fCard","fSavAcct"]){const w=$("#"+id);
+  w.addEventListener("input",()=>w.classList.remove("auto"));
+  const un=e=>{if(e.target.closest(".comboItem"))w.classList.remove("auto");};
+  w.addEventListener("click",un);w.addEventListener("touchend",un);}
 
 /* ---------- render ---------- */
 /* pending + refund helpers */
@@ -1747,7 +1775,9 @@ function setMode(m){
   $("#mSave").classList.toggle("on",m==="save");
   $("#lblAmount").textContent=m==="save"?(view.wdraw?"Amount to take out":"Amount to put away"):m==="income"?"Amount":view.refund?"Refund amount":"Price";
   $("#lblName").textContent=m==="spend"?"Item name":m==="income"?"From":"Note (optional)";
-  $("#fName").placeholder=m==="spend"?"e.g. Bounty Hunter Funko":m==="income"?"e.g. Raytheon":"e.g. Apple Savings";
+  $("#fName").placeholder=m==="spend"?"What did you buy?":m==="income"?"Who paid you?":"Add a note";
+  $("#nameHint").style.display=m==="save"?"none":"";
+  if(m==="save")closeAc();
   for(const el of ["wCat","wRet","wCard"]) $("#"+el).style.display=m==="spend"?"":"none";
   {const fs=S.funds||[],cur=$("#fFund").value;
    $("#wFund").style.display=(m==="spend"&&fs.length&&!view.refund)?"":"none";
@@ -1804,10 +1834,88 @@ function retIdFor(name){
   const r={id:uid("r"),name:n};S.retailers.push(r);fillSelects();toast("Added retailer “"+n+"”");
   return r.id;
 }
+/* ---------- past-entry autofill ----------
+   Typing an item name offers past entries with that name; picking one fills
+   price, category, card and retailer (spending) or amount (income). Every new
+   entry starts blank — nothing is pre-selected. */
+function acSource(){
+  const by=new Map();
+  const src=view.mode==="income"?S.inc:S.tx.filter(t=>t.a>0);
+  for(const t of src){
+    const n=(t.n||"").trim(); if(!n)continue;
+    const k=n.toLowerCase(),cur=by.get(k);
+    if(!cur){by.set(k,{t,count:1});continue;}
+    cur.count++;
+    if(t.d>cur.t.d||(t.d===cur.t.d&&(t.ts||0)>(cur.t.ts||0)))cur.t=t;
+  }
+  return [...by.values()];
+}
+const monthYear=iso=>{const [y,m]=iso.split("-");return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m-1]+" "+y;};
+let acHits=[];
+function closeAc(){const l=$("#acList");if(l)l.hidden=true;}
+function drawAc(){
+  const list=$("#acList"),inp=$("#fName");
+  const q=inp.value.trim().toLowerCase();
+  if(view.mode==="save"||!q){closeAc();acHits=[];return;}
+  const all=acSource();
+  const st=all.filter(x=>x.t.n.toLowerCase().startsWith(q));
+  const inn=all.filter(x=>{const n=x.t.n.toLowerCase();return !n.startsWith(q)&&n.includes(q);});
+  const rec=(a,b)=>b.t.d.localeCompare(a.t.d);
+  acHits=st.sort(rec).concat(inn.sort(rec)).slice(0,6);
+  if(!acHits.length){closeAc();return;}
+  const exact=acHits.some(x=>x.t.n.toLowerCase()===q);
+  list.innerHTML=`<div class="acHead">From your past entries</div>`+
+    acHits.map((x,i)=>{const t=x.t;
+      const meta=view.mode==="income"?"Income":[subName(t.s),cardName(t.k),retName(t.r)].filter(v=>v&&v!=="—").join(" · ");
+      return `<button type="button" class="acItem" data-ac="${i}"><div class="main"><b>${esc(t.n)}</b><span>${esc(meta)}</span></div>
+        <div class="r num"><b>${money(Math.abs(t.a))}</b><span>last: ${monthYear(t.d)}</span></div></button>`;}).join("")+
+    (exact?"":`<button type="button" class="acNew" data-acnew="1">Keep “${esc(inp.value.trim())}” as a new item</button>`);
+  list.hidden=false;
+}
+function setAuto(el,on){el.classList.toggle("auto",!!on);}
+function applyAc(x){
+  const t=x.t;closeAc();
+  $("#fName").value=t.n;
+  $("#fAmount").value=Math.abs(t.a).toFixed(2);setAuto($("#wAmount"),1);
+  if(view.mode==="spend"){
+    if(byId(S.subs,t.s)){cCat.set(t.s);setAuto($("#fCat"),1);suggestFund(t.s);}
+    if(t.k&&byId(S.cards,t.k)){cCard.set(t.k);setAuto($("#fCard"),1);}
+    if(t.r&&byId(S.retailers,t.r)){cRet.set(t.r);setAuto($("#fRet"),1);}
+  }
+  setDate(todayIso());
+  $("#filledMsg").textContent="Filled from your last “"+t.n+"”";
+  $("#filledBar").hidden=false;
+  $("#fName").blur();syncSaveLabel();
+}
+function clearEntry(){
+  closeAc();acHits=[];
+  $("#fAmount").value="";$("#fName").value="";$("#fFund").value="";view.autoFund=null;
+  if(cCat)cCat.set("");if(cCard)cCard.set("");if(cRet)cRet.set("");if(cSav)cSav.set("");
+  for(const id of ["wAmount","fCat","fCard","fRet","fSavAcct"])setAuto($("#"+id),0);
+  $("#filledBar").hidden=true;
+}
+$("#fName").addEventListener("input",drawAc);
+$("#fName").addEventListener("focus",drawAc);
+$("#fAmount").addEventListener("input",()=>setAuto($("#wAmount"),0));
+$("#filledClear").onclick=()=>{clearEntry();syncSaveLabel();$("#fName").focus();};
+{
+  const list=$("#acList");let y0=0,moved=false;
+  const hit=b=>{if(b.dataset.acnew){closeAc();$("#fName").blur();return;}
+    const x=acHits[+b.dataset.ac];if(x)applyAc(x);};
+  list.addEventListener("touchstart",e=>{y0=e.touches[0].clientY;moved=false;},{passive:true});
+  list.addEventListener("touchmove",e=>{if(Math.abs(e.touches[0].clientY-y0)>6)moved=true;},{passive:true});
+  list.addEventListener("touchend",e=>{if(moved)return;const b=e.target.closest("[data-ac],[data-acnew]");if(!b)return;e.preventDefault();hit(b);});
+  list.addEventListener("click",e=>{const b=e.target.closest("[data-ac],[data-acnew]");if(b)hit(b);});
+  const outside=e=>{if(list.hidden)return;if(e.target.closest(".acwrap"))return;closeAc();};
+  document.addEventListener("touchstart",outside,{passive:true});
+  document.addEventListener("mousedown",outside);
+}
 $("#saveEntry").onclick=()=>{
   const a=num($("#fAmount").value);
   if(!isFinite(a)||a<=0){toast("Enter an amount above zero");$("#fAmount").focus();return;}
   const n=$("#fName").value.trim(),y=cycleFor(view.date);
+  if(view.mode==="spend"&&!cCat.id){toast("Pick a category");cCat.focus();return;}
+  if(view.mode==="spend"&&!cCard.id){toast("Pick what you paid with");cCard.focus();return;}
   let delta=0;
   if(view.mode==="spend")delta=view.refund?a:-a;
   else if(view.mode==="income")delta=a;
@@ -1820,9 +1928,9 @@ $("#saveEntry").onclick=()=>{
        ".\n\nAdd it anyway?"))return;
   }
   if(view.mode==="spend"){
-    const sid=cCat.id||(S.subs[0]||{}).id,amt=view.refund?-Math.abs(a):a;
+    const sid=cCat.id,amt=view.refund?-Math.abs(a):a;
     const rec={id:uid("t"),ts:Date.now(),d:view.date,n:n||subName(sid),a:+amt.toFixed(2),s:sid,
-               r:retIdFor(cRet.text),k:cCard.id||(S.cards[0]||{}).id,y};
+               r:retIdFor(cRet.text),k:cCard.id,y};
     if(view.pend)rec.p=1;
     if(payFund){rec.fund=payFund;
       const mv=takeFromFund(payFund,Math.abs(amt),view.date,{note:"Paid "+rec.n});
@@ -1839,7 +1947,7 @@ $("#saveEntry").onclick=()=>{
     if(view.pend)rec.p=1;
     S.sav.push(rec);
   }
-  save();$("#fAmount").value="";$("#fName").value="";$("#fFund").value="";view.autoFund=null;
+  save();clearEntry();
   view.cycle=y;
   toast(view.mode==="spend"&&view.refund?"Refund of "+money(a)+" logged"
        :view.mode==="save"&&view.wdraw?money(a)+" taken out of savings":"Added "+money(a));
