@@ -1411,7 +1411,7 @@ function renderPlan(){
         <div class="pr num ${cls}">${money(Math.abs(r.rem))}<small>${tag}</small></div></button>`;};
     const F=view.folds||{};
     const isSF=r=>r.line.kind==="savings"||r.line.kind==="fund";
-    const showSF=r=>isSF(r)&&(r.bud||r.spent||(r.line.kind==="fund"&&fundBal(r.line.fund)>0));
+    const showSF=r=>isSF(r)&&(r.bud||r.spent);
     const sfRows=rows.filter(showSF);
     const fixed=rows.filter(r=>!isSF(r)&&isFixed(r.line)&&(r.bud||r.spent));
     const flex=rows.filter(r=>!isSF(r)&&!isFixed(r.line)&&(r.bud||r.spent));
@@ -1421,7 +1421,7 @@ function renderPlan(){
         <button type="button" data-fold="sfC" style="flex:1;text-align:left;font:inherit;color:inherit;padding:0"><span>SAVINGS &amp; FUNDS</span>
           <span class="chev num" style="margin-left:8px">${money(ss)} of ${money(sb)} ${F.sfC?"▾":"▴"}</span></button>
         <button type="button" data-tabjump="funds" style="color:var(--accent);font-size:13.5px;padding:2px 0 2px 10px">All funds ›</button></div>
-      ${F.sfC?"":(sfRows.length?sfRows.map(line).join(""):`<div class="empty" style="padding:14px 16px">No savings or fund budget on this cycle.</div>`)}</div>`;
+      ${F.sfC?"":(sfRows.length?sfRows.map(line).join(""):`<div class="empty" style="padding:14px 16px">Nothing planned for savings or funds this cycle. Balances are under All funds.</div>`)}</div>`;
     const fb=fixed.reduce((a,r)=>a+r.bud,0),fs=fixed.reduce((a,r)=>a+r.spent,0);
     const list=`<div class="card flush">
       ${fixed.length?`<button class="fold" data-fold="fixedC"><span>FIXED · ${fixed.length} line${fixed.length===1?"":"s"}</span>
