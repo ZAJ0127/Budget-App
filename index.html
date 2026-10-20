@@ -263,7 +263,9 @@ html,body{overflow-x:clip;max-width:100%}
       <div class="chips" id="wIncSav" style="margin-top:10px">
         <button type="button" class="chip" id="tPay">+ Paycheck</button>
         <button type="button" class="chip" id="tToSav">Goes to Apple Savings</button>
-        <button type="button" class="chip" data-incq="Apple Daily Cash">+ Daily Cash</button>
+        <button type="button" class="chip" data-incq="Apple Daily Cash" data-inct="apple">+ Daily Cash</button>
+        <button type="button" class="chip" data-incq="Roth IRA Interest" data-inct="Roth IRA">+ Roth interest</button>
+        <button type="button" class="chip" data-incq="Investment Interest" data-inct="Investment">+ Investment interest</button>
       </div>
       <div class="hint" id="incSavHint" style="display:none">Counts as income, lands in Apple Savings, and raises this cycle's Savings budget by the same amount. Checking doesn't change.</div>
       <label class="f"><span id="lblAmount">Price</span>
@@ -278,6 +280,8 @@ html,body{overflow-x:clip;max-width:100%}
         <select class="inp" id="fFund"></select>
         <div class="hint" id="fundHint">Pick a fund and the bill comes out of it. The plan isn't charged.</div></div>
       <div class="f" id="wSavAcct"><span id="lblSavAcct">Savings account</span><div id="fSavAcct"></div></div>
+      <div class="f" id="wSrc" style="display:none"><span>Paid from</span><select class="inp" id="fSrc"></select>
+        <div class="hint">Checking goes down. Apple Savings or a fund is a transfer, so checking stays put.</div></div>
       <label class="f"><span>Date</span>
         <div class="datewrap">
           <input class="inp num" id="fDateText" type="text" placeholder="9/5/26 or 090526" autocomplete="off">
@@ -492,7 +496,7 @@ const money0=n=>S.settings.symbol+Math.round(Math.abs(n)).toLocaleString();
 
 const txIn=i=>S.tx.filter(t=>t.y===i);
 const incIn=i=>S.inc.filter(t=>t.y===i);
-const savIn=i=>S.sav.filter(t=>t.y===i&&!t.fund&&!t.mv);      /* fund moves are not "saved this cycle" */
+const savIn=i=>S.sav.filter(t=>t.y===i&&!t.fund&&!t.mv&&!t.acct);      /* fund moves are not "saved this cycle" */
 const planTx=i=>txIn(i).filter(t=>!t.fund);             /* spending paid out of a fund is not charged to the plan */
 const fundOf=id=>(S.funds||[]).find(f=>f.id===id);
 const fundBal=id=>cents(S.sav.filter(x=>x.fund===id).reduce((a,x)=>a+x.a,0));
@@ -506,7 +510,12 @@ const fundsCleared=()=>cents(S.sav.filter(x=>x.fund&&!x.p).reduce((a,x)=>a+x.a,0
 const unalloc=()=>cents(appleTotal()-fundsCleared());
 const emergMin=f=>f.emerg?cents((f.emerg.months||6)*(f.emerg.monthly||0)):0;
 const fundForSub=sid=>(S.funds||[]).find(f=>f.offer!==false&&(f.cats||[]).includes(sid));
-const fundPutIn=(i,id)=>cents(S.sav.filter(x=>x.fund===id&&x.y===i&&x.a>0&&!x.mv).reduce((a,x)=>a+x.a,0));
+const fundPutIn=(i,id)=>{
+  const f=fundOf(id);
+  let v=S.sav.filter(x=>x.fund===id&&x.y===i&&x.a>0&&!x.mv).reduce((a,x)=>a+x.a,0);
+  /* money put straight into the fund's own account (Roth IRA, Investment) counts here too */
+  if(f&&f.dest)v+=S.sav.filter(x=>x.acct===f.dest&&x.y===i&&x.a>0&&!x.mv).reduce((a,x)=>a+x.a,0);
+  return cents(v);};
 /* fund money pulled back to fund plan lines in cycle i: extra cash the plan can use */
 const fundBackIn=i=>cents(S.sav.filter(x=>x.fund&&x.y===i&&x.adj&&x.a<0).reduce((a,x)=>a-x.a,0));
 
@@ -602,7 +611,10 @@ function scheduledIncome(i){
   }
   return cents(tot);
 }
-const totalSaved=()=>S.sav.filter(x=>!x.p).reduce((a,t)=>a+t.a,0);
+const totalSaved=()=>S.sav.filter(x=>!x.p&&!x.acct).reduce((a,t)=>a+t.a,0);
+/* entries that belong to a savings account of its own (Roth IRA, Investment) */
+const acctNet=id=>cents(S.sav.filter(x=>x.acct===id&&!x.p).reduce((a,t)=>a+t.a,0));
+const incTargetName=v=>v===true||v===1?"Apple Savings":((byId(S.accounts,v)||{}).name||"savings");
 const pendSav=()=>S.sav.filter(x=>x.p);
 const savIncoming=()=>-pendSav().filter(x=>x.a<0).reduce((a,t)=>a+t.a,0);
 function accBal(a){
@@ -610,12 +622,13 @@ function accBal(a){
   if(a.type==="bank")    return totalIncome()-clearedSpend()-savingsTotal()+adj;
   if(a.type==="pending") return openBalance()+adj;
   if(a.type==="linked")  return totalSaved()+adj;
+  if(a.type==="savings") return cents(adj+acctNet(a.id));
   return adj;
 }
 const accOf=t=>S.accounts.filter(a=>a.type===t);
 function savingsTotal(){
   return S.accounts.filter(a=>a.type==="linked"||a.type==="savings")
-    .reduce((s,a)=>s+(a.type==="linked"?totalSaved()+(a.bal||0):(a.bal||0)),0);
+    .reduce((s,a)=>s+(a.type==="linked"?totalSaved()+(a.bal||0):(a.bal||0)+acctNet(a.id)),0);
 }
 const bankAcc=()=>S.accounts.find(a=>a.type==="bank");
 const bankBal=()=>{const a=bankAcc();return a?cents(accBal(a)):0;};
@@ -1809,8 +1822,13 @@ function setMode(m){
   $("#tWithdraw").style.display=m==="save"?"":"none";
   $("#wIncSav").style.display=m==="income"?"":"none";
   $("#incSavHint").style.display=(m==="income"&&view.toSav)?"":"none";
+  $("#incSavHint").textContent=view.toSav===true
+    ?"Counts as income, lands in Apple Savings, and raises this cycle's Savings budget by the same amount. Checking doesn't change."
+    :"Counts as income and adds to "+incTargetName(view.toSav)+". If it has a plan line, that budget rises by the same amount. Checking doesn't change.";
   $("#tToSav").classList.toggle("on",!!view.toSav);
-  $("#tToSav").textContent=view.toSav?"✓ Goes to Apple Savings":"Goes to Apple Savings";
+  $("#tToSav").textContent=view.toSav?"✓ Goes to "+incTargetName(view.toSav):"Goes to a savings account";
+  document.querySelectorAll("[data-inct]").forEach(b=>{b.style.display=(b.dataset.inct==="apple"||incTarget(b.dataset.inct))?"":"none";});
+  if(typeof syncSrc==="function")syncSrc();
   $("#tWithdraw").classList.toggle("on",!!view.wdraw);
   $("#tPending").classList.toggle("on",!!view.pend);
   if(typeof syncPendChip==="function")syncPendChip();
@@ -1820,7 +1838,10 @@ function setMode(m){
   syncSaveLabel();
 }
 $("#tPending").onclick=()=>{view.pend=!view.pend;setMode(view.mode);};
-$("#tToSav").onclick=()=>{view.toSav=!view.toSav;setMode(view.mode);};
+const incTarget=t=>t==="apple"?true:((S.accounts.find(a=>a.type==="savings"&&a.name===t)||{}).id||false);
+const incCycle=cur=>{const all=[true].concat(S.accounts.filter(a=>a.type==="savings").map(a=>a.id));
+  const i=cur?all.indexOf(cur):-1;return i+1<all.length?all[i+1]:false;};
+$("#tToSav").onclick=()=>{view.toSav=incCycle(view.toSav);setMode(view.mode);};
 $("#tPay").onclick=()=>{
   const p=+S.settings.paycheck||0;
   view.toSav=false;closeAc();
@@ -1830,7 +1851,33 @@ $("#tPay").onclick=()=>{
   if(p>0){toast("Filled in your paycheck");$("#fAmount").blur();}
   else{toast("Set your paycheck amount in Settings");$("#fAmount").focus();}
 };
-document.querySelectorAll("[data-incq]").forEach(b=>b.onclick=()=>{view.toSav=true;closeAc();$("#fName").value=b.dataset.incq;setMode(view.mode);toast("Filled in "+b.dataset.incq);$("#fAmount").focus();});
+document.querySelectorAll("[data-incq]").forEach(b=>b.onclick=()=>{view.toSav=incTarget(b.dataset.inct||"apple");if(!view.toSav){toast("Add that account first");return;}closeAc();$("#fName").value=b.dataset.incq;setMode(view.mode);toast("Filled in "+b.dataset.incq);$("#fAmount").focus();});
+function savTarget(){
+  const t=((cSav&&cSav.text)||"").trim().toLowerCase();
+  return S.accounts.find(a=>a.type==="savings"&&((cSav&&cSav.id)===a.id||a.name.toLowerCase()===t))||null;}
+function syncSrc(){
+  const show=view.mode==="save"&&!view.wdraw&&!!savTarget();
+  $("#wSrc").style.display=show?"":"none";
+  if(!show)return;
+  const cur=$("#fSrc").value;
+  const fs=(S.funds||[]).filter(f=>fundBal(f.id)>0.005);
+  $("#fSrc").innerHTML=`<option value="checking">Checking</option><option value="apple">Apple Savings, not in a fund · ${money(unalloc())}</option>`
+    +fs.map(f=>`<option value="f:${f.id}">${esc(f.name)} fund · ${money(fundBal(f.id))}</option>`).join("");
+  if([...$("#fSrc").options].some(o=>o.value===cur))$("#fSrc").value=cur;}
+["input","focusout","click"].forEach(ev=>$("#fSavAcct").addEventListener(ev,()=>setTimeout(syncSrc,260)));
+/* a contribution to (or taking money out of) an account of its own */
+function recordAcct(t,a,note){
+  const d=view.date,y=cycleFor(d),amt=+a.toFixed(2),ts=Date.now();
+  const src=view.wdraw?"checking":($("#fSrc").value||"checking");
+  if(src==="checking"){
+    const r={id:uid("v"),ts,d,n:view.wdraw?"From "+t.name:t.name,a:view.wdraw?-amt:amt,y,acct:t.id};
+    if(note)r.note=note;if(view.pend)r.p=1;S.sav.push(r);return;}
+  const g=uid("m");
+  if(src==="apple"){
+    S.sav.push({id:uid("v"),ts,d,n:"To "+t.name,a:-amt,y,mv:g},{id:uid("v"),ts,d,n:"From Apple Savings",a:amt,y,mv:g,acct:t.id});return;}
+  const f=fundOf(src.slice(2));
+  S.sav.push({id:uid("v"),ts,d,n:"Sent to "+t.name,a:-amt,y,mv:g,fund:f.id},{id:uid("v"),ts,d,n:"From "+f.name,a:amt,y,mv:g,acct:t.id});
+}
 function syncPendChip(){
   const m=view.mode;
   $("#tPending").textContent=m==="save"
@@ -1960,7 +2007,10 @@ $("#saveEntry").onclick=()=>{
   else delta=view.wdraw?a:-a;
   const payFund=(view.mode==="spend"&&!view.refund&&$("#fFund").value)||"";
   if(payFund&&a>fundBal(payFund)+0.005&&!confirm("That's more than the "+money(fundBal(payFund))+" in "+fundOf(payFund).name+". Pay it from the fund anyway?"))return;
-  if(delta<0&&!payFund){
+  const tg=view.mode==="save"?savTarget():null,srcV=tg&&!view.wdraw?($("#fSrc").value||"checking"):"checking";
+  if(tg&&srcV==="apple"&&a>unalloc()+0.005&&!confirm("That's more than the "+money(unalloc())+" in Apple Savings outside your funds. Add it anyway?"))return;
+  if(tg&&srcV.startsWith("f:")&&a>fundBal(srcV.slice(2))+0.005&&!confirm("That's more than the "+money(fundBal(srcV.slice(2)))+" in "+fundOf(srcV.slice(2)).name+". Add it anyway?"))return;
+  if(delta<0&&!payFund&&srcV==="checking"){
     const after=freeToSpend()+delta,f=floorOf();
     if(after<f&&!confirm((minChk()&&after<0?"That takes checking "+money(-after)+" below your "+money(minChk())+" minimum":"That leaves "+money(after)+(f?" against your "+money(f)+" cushion":" in checking"))+
        ".\n\nAdd it anyway?"))return;
@@ -1976,26 +2026,28 @@ $("#saveEntry").onclick=()=>{
     S.tx.push(rec);
     if(view.favThis){addFav(rec);view.favThis=false;$("#favThis").classList.remove("on");$("#favThis").textContent="♡";}
   } else if(view.mode==="income"){
-    const r={id:uid("i"),ts:Date.now(),d:view.date,n:n||(view.toSav?"Apple Savings Interest":"Income"),a:+a.toFixed(2),y};
-    if(view.toSav)r.sv=1;
+    const r={id:uid("i"),ts:Date.now(),d:view.date,n:n||(view.toSav?incTargetName(view.toSav)+" Interest":"Income"),a:+a.toFixed(2),y};
+    if(view.toSav)r.sv=view.toSav===true?1:view.toSav;
     S.inc.push(r);if(r.sv)syncIncSav(r);
   }
   else {
+    if(tg)recordAcct(tg,a,n);
+    else{
     const acct=(cSav&&cSav.text)||"";
     const rec={id:uid("v"),ts:Date.now(),d:view.date,
                n:acct||n||(view.wdraw?"Withdrawal":"Savings"),
                a:+((view.wdraw?-a:a).toFixed(2)),y};
     if(n&&acct)rec.note=n;
     if(view.pend)rec.p=1;
-    S.sav.push(rec);
+    S.sav.push(rec);}
   }
   save();clearEntry();
   view.cycle=y;
   toast(view.mode==="spend"&&view.refund?"Refund of "+money(a)+" logged"
        :view.mode==="save"&&view.wdraw?money(a)+" taken out of savings":"Added "+money(a));
-  const wasSv=view.mode==="income"&&view.toSav;
+  const wasSv=view.mode==="income"&&view.toSav,svName=incTargetName(view.toSav);
   view.refund=false;view.wdraw=false;view.pend=true;view.toSav=false;setMode(view.mode);render();
-  if(wasSv)toast("Added "+money(a)+" to Apple Savings and the Savings budget");
+  if(wasSv)toast("Added "+money(a)+" to "+svName);
 };
 
 /* ---------- edit ---------- */
@@ -2035,7 +2087,7 @@ function openEdit(id,kind){
     <label class="f"><span>Date</span><input class="inp num" id="eD" type="date" value="${rec.d}"></label>
     ${kind==="inc"?`<div class="chips" style="margin-top:16px">
       <button type="button" class="chip ${rec.p?"on":""}" id="eIp">${rec.p?"⏳ Not received":"✓ Received"}</button>
-      <button type="button" class="chip ${rec.sv?"on":""}" id="eSv">${rec.sv?"✓ Goes to Apple Savings":"Goes to Apple Savings"}</button></div>`:""}
+      <button type="button" class="chip ${rec.sv?"on":""}" id="eSv">${rec.sv?"✓ Goes to "+incTargetName(rec.sv):"Goes to a savings account"}</button></div>`:""}
     ${kind==="sav"?`<div class="chips" style="margin-top:16px">
       <button type="button" class="chip ${rec.a<0?"on":""}" id="eWd">${rec.a<0?"↩ Taken out":"Put away"}</button>
       <button type="button" class="chip ${rec.p?"on":""}" id="eSp">${rec.p?"⏳ Not landed":"✓ Landed"}</button></div>`:""}
@@ -2062,9 +2114,9 @@ function openEdit(id,kind){
     $("#eIp").onclick=()=>{ip=!ip;$("#eIp").classList.toggle("on",ip);
       $("#eIp").textContent=ip?"⏳ Not received":"✓ Received";rec._ip=ip;};
     rec._ip=ip;
-    let sv=!!rec.sv;
-    $("#eSv").onclick=()=>{sv=!sv;$("#eSv").classList.toggle("on",sv);
-      $("#eSv").textContent=sv?"✓ Goes to Apple Savings":"Goes to Apple Savings";rec._sv=sv;};
+    let sv=rec.sv===1?true:(rec.sv||false);
+    $("#eSv").onclick=()=>{sv=incCycle(sv);$("#eSv").classList.toggle("on",!!sv);
+      $("#eSv").textContent=sv?"✓ Goes to "+incTargetName(sv):"Goes to a savings account";rec._sv=sv;};
     rec._sv=sv;
   }
   if(kind==="sav"){
@@ -2110,7 +2162,7 @@ function openEdit(id,kind){
     rec.a=+a.toFixed(2); rec.n=$("#eN").value.trim()||rec.n;
     if($("#eD").value){rec.d=$("#eD").value;rec.y=cycleFor(rec.d);}
     if(kind==="inc"){if(rec._ip)rec.p=1;else delete rec.p; delete rec._ip;
-      if(rec._sv)rec.sv=1;else delete rec.sv; delete rec._sv; syncIncSav(rec);}
+      if(rec._sv)rec.sv=rec._sv===true?1:rec._sv;else delete rec.sv; delete rec._sv; syncIncSav(rec);}
     if(kind==="sav"){rec.a=rec._w?-Math.abs(rec.a):Math.abs(rec.a);
       if(rec._sp)rec.p=1;else delete rec.p; delete rec._w;delete rec._sp;
       if(rec.adj){const r=oldA?Math.abs(rec.a)/oldA:1;
@@ -2274,6 +2326,11 @@ function openAccount(id){
       <div class="money-in sm"><i>${esc(S.settings.symbol)}</i><input class="num" id="aB" type="text" inputmode="decimal" value="${a&&a.bal?a.bal:""}" placeholder="0.00"></div></label>
     <div class="hint" id="aHint"></div>
     ${a?`<div class="card" style="margin-top:14px"><div class="legend"><span>Shows as</span><b class="num">${money(accBal(a))}</b></div></div>`:""}
+    ${a&&a.type==="savings"?`<div class="card" style="margin-top:12px"><h2>Activity</h2>
+      ${(()=>{const act=S.sav.filter(x=>x.acct===a.id).sort((p,q)=>p.d<q.d?1:p.d>q.d?-1:0).slice(0,10);
+        return act.length?act.map(x=>`<button class="row" data-edit="${x.id}" data-kind="sav"><div class="main"><b>${esc(x.note||x.n)}</b><span>${fmtShort(x.d)} ${dOf(x.d).getFullYear()}${x.p?" · not landed":""}</span></div><div class="amt num">${money(x.a,true)}</div></button>`).join(""):`<div class="hint">No entries yet. The balance above is where it started.</div>`;})()}
+      <div style="display:flex;gap:8px;margin-top:10px"><button class="btn sm ghost" id="aContrib" style="flex:1;margin:0">Add contribution</button>
+      <button class="btn sm ghost" id="aInt" style="flex:1;margin:0">Add interest</button></div></div>`:""}
     <button class="btn" id="aSave">${a?"Save":"Add account"}</button>
     ${a?`<button class="btn sm danger" id="aDel">Delete account</button>`:""}`);
   function syncLbl(){
@@ -2283,7 +2340,7 @@ function openAccount(id){
       t==="bank"?"Every income entry, less every cleared purchase, less what's in your savings accounts."
      :t==="pending"?"Mirrors whatever is sitting on the Pending tab."
      :t==="linked"?"Adds up all "+S.sav.length+" savings transfers you've logged. The adjustment is the balance before the first one."
-     :t==="savings"?"A savings figure you keep up to date. Counts toward total savings and comes off checking."
+     :t==="savings"?"The balance is what it started at. Contributions and interest you log are added on top. Counts toward total savings and comes off checking."
      :"A commitment you keep up to date, like preorders. Comes off what's free to spend.";
   }
   $("#aT").onchange=syncLbl; syncLbl();
@@ -2293,6 +2350,9 @@ function openAccount(id){
     if(a){a.name=n;a.type=type;a.bal=bal;if(type==="manual")a.upd=todayIso();}
     else S.accounts.push({id:uid("a"),name:n,type,bal,upd:todayIso()});
     save();closeSheet();render();toast("Saved");};
+  if(a&&a.type==="savings"){
+    $("#aContrib").onclick=()=>{closeSheet();setTab("add");view.wdraw=false;setMode("save");cSav.set(a.id);syncSrc();};
+    $("#aInt").onclick=()=>{closeSheet();setTab("add");view.toSav=a.id;setMode("income");$("#fName").value=a.name+" Interest";$("#fAmount").focus();};}
   if(a)$("#aDel").onclick=()=>{
     if(!confirm("Delete "+a.name+"? Your transactions aren't affected."))return;
     S.accounts=S.accounts.filter(x=>x.id!==id);save();closeSheet();render();toast("Deleted");};
@@ -2514,11 +2574,14 @@ function bumpBudget(y,lid,d){
    Savings line budget rises by the same amount (kept in adj like other moves). */
 function syncIncSav(inc){
   const i=S.sav.findIndex(x=>x.iv===inc.id),cur=i>=0?S.sav[i]:null;
-  const line=S.lines.find(l=>l.kind==="savings");
+  const acct=typeof inc.sv==="string"?inc.sv:"";
+  const fl=acct?S.funds.find(f=>f.dest===acct):null;
+  const line=acct?(fl?fundLineOf(fl.id):null):S.lines.find(l=>l.kind==="savings");
   if(cur)for(const x of cur.adj||[])bumpBudget(cur.y,x.l,-x.a);
   if(!inc.sv){if(cur)S.sav.splice(i,1);return;}
   const rec=cur||{id:uid("v"),ts:Date.now(),iv:inc.id};
   rec.d=inc.d;rec.n=inc.n;rec.a=inc.a;rec.y=inc.y;
+  if(acct)rec.acct=acct;else delete rec.acct;
   if(inc.p)rec.p=1;else delete rec.p;
   rec.adj=line?[{l:line.id,a:inc.a}]:[];
   for(const x of rec.adj)bumpBudget(rec.y,x.l,x.a);
@@ -2750,8 +2813,9 @@ function openSendOut(fid){
     if(!isFinite(a)||a<=0||!ac){toast("Enter an amount above zero");return;}
     if(a>bal+0.005&&!confirm("That's more than the "+money(bal)+" in "+f.name+". Send it anyway?"))return;
     const amt=cents(a);
-    S.sav.push({id:uid("v"),ts:Date.now(),d,n:"Sent to "+ac.name,a:-amt,y:cycleFor(d),fund:fid,out:ac.id});
-    ac.bal=cents((ac.bal||0)+amt);ac.upd=todayIso();
+    const g=uid("m"),ts=Date.now(),yy=cycleFor(d);
+    S.sav.push({id:uid("v"),ts,d,n:"Sent to "+ac.name,a:-amt,y:yy,mv:g,fund:fid},{id:uid("v"),ts,d,n:"From "+f.name,a:amt,y:yy,mv:g,acct:ac.id});
+    ac.upd=todayIso();
     save();closeSheet();render();toast(money(amt)+" sent to "+ac.name);};
 }
 
