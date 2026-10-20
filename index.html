@@ -252,7 +252,8 @@ html,body{overflow-x:clip;max-width:100%}
         <button id="mIncome">Income</button>
         <button id="mSave">Savings</button>
       </div>
-      <button class="btn sm ghost" id="openFavs" style="margin-top:0">♥ Favourites</button>
+      <button class="btn sm ghost" id="resetEntry" style="margin-top:0">↺ Reset entry</button>
+      <button class="btn sm ghost" id="openFavs" style="margin-top:8px">♥ Favourites</button>
       <div class="filledbar" id="filledBar" hidden><span id="filledMsg">Filled from last time</span>
         <button type="button" id="filledClear">Clear all</button></div>
       <div class="f" style="margin-top:14px"><label for="fName" id="lblName" style="display:block;font-size:13px;color:var(--muted);margin-bottom:5px">Item name</label>
@@ -1839,6 +1840,11 @@ function syncPendChip(){
 $("#favThis").onclick=()=>{view.favThis=!view.favThis;$("#favThis").classList.toggle("on",!!view.favThis);
   $("#favThis").textContent=view.favThis?"♥":"♡";toast(view.favThis?"Will be saved as a favourite":"Won't be saved as a favourite");};
 $("#openFavs").onclick=()=>openFavs();
+$("#resetEntry").onclick=()=>{
+  clearEntry();
+  view.toSav=false;view.refund=false;view.wdraw=false;view.pend=true;view.favThis=false;
+  $("#favThis").classList.remove("on");$("#favThis").textContent="♡";
+  setDate(todayIso());setMode(view.mode);syncSaveLabel();toast("Entry reset");};
 function syncSaveLabel(){
   const m=view.mode,a=num($("#fAmount").value),has=isFinite(a)&&a>0;
   const amt=has?" "+money(a):"";
