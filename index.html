@@ -1477,7 +1477,7 @@ function renderPlan(){
         <div class="pr num ${cls}">${money(Math.abs(r.rem))}<small>${tag}</small></div></button>`;};
     const F=view.folds||{};
     const isSF=r=>r.line.kind==="savings"||r.line.kind==="fund";
-    const showSF=r=>isSF(r)&&(r.bud||r.spent);
+    const showSF=r=>isSF(r)&&(r.bud||r.spent||r.line.kind==="savings");
     const sfRows=rows.filter(showSF);
     const fixed=rows.filter(r=>!isSF(r)&&isFixed(r.line)&&(r.bud||r.spent));
     const flex=rows.filter(r=>!isSF(r)&&!isFixed(r.line)&&(r.bud||r.spent));
