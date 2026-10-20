@@ -259,6 +259,11 @@ html,body{overflow-x:clip;max-width:100%}
         <div class="acwrap"><input class="inp" id="fName" type="text" autocomplete="off" autocapitalize="words" placeholder="What did you buy?">
           <div class="acList" id="acList" hidden></div></div>
         <div class="hint" id="nameHint">Start typing — past items fill everything in.</div></div>
+      <div class="chips" id="wIncSav" style="margin-top:10px">
+        <button type="button" class="chip" id="tToSav">Goes to Apple Savings</button>
+        <button type="button" class="chip" data-incq="Apple Daily Cash">+ Daily Cash</button>
+      </div>
+      <div class="hint" id="incSavHint" style="display:none">Counts as income, lands in Apple Savings, and raises this cycle's Savings budget by the same amount. Checking doesn't change.</div>
       <label class="f"><span id="lblAmount">Price</span>
         <div class="money-in" id="wAmount"><i>$</i><input class="num" id="fAmount" type="text" inputmode="decimal" placeholder="0.00"></div>
       </label>
@@ -288,11 +293,6 @@ html,body{overflow-x:clip;max-width:100%}
         <button type="button" class="chip" id="tRefund">↩ Money coming back</button>
         <button type="button" class="chip" id="tWithdraw">↩ Taking money out</button>
       </div>
-      <div class="chips" id="wIncSav" style="margin-top:14px">
-        <button type="button" class="chip" id="tToSav">Goes to Apple Savings</button>
-        <button type="button" class="chip" data-incq="Apple Daily Cash">+ Daily Cash</button>
-      </div>
-      <div class="hint" id="incSavHint" style="display:none">Counts as income, lands in Apple Savings, and raises this cycle's Savings budget by the same amount. Checking doesn't change.</div>
       <div style="height:6px"></div>
     </div>
     <div style="height:84px"></div>
@@ -1814,7 +1814,7 @@ function setMode(m){
 }
 $("#tPending").onclick=()=>{view.pend=!view.pend;setMode(view.mode);};
 $("#tToSav").onclick=()=>{view.toSav=!view.toSav;setMode(view.mode);};
-document.querySelectorAll("[data-incq]").forEach(b=>b.onclick=()=>{view.toSav=true;$("#fName").value=b.dataset.incq;setMode(view.mode);$("#fAmount").focus();});
+document.querySelectorAll("[data-incq]").forEach(b=>b.onclick=()=>{view.toSav=true;closeAc();$("#fName").value=b.dataset.incq;setMode(view.mode);toast("Filled in "+b.dataset.incq);$("#fAmount").focus();});
 function syncPendChip(){
   const m=view.mode;
   $("#tPending").textContent=m==="save"
