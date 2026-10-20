@@ -1759,10 +1759,11 @@ function renderSetup(){
       <div class="money-in sm"><i>${esc(s.symbol)}</i>
         <input class="num" id="setFloor" type="text" inputmode="decimal" value="${s.floor||""}" placeholder="0.00"></div>
       <div class="hint">Pending charges count as already gone. 0 warns only on going negative.</div></label>
+    <label class="f"><span>Paycheck name</span><input class="inp" id="setPayName" value="${esc(s.paycheckName||"Paycheck")}" maxlength="40"></label>
     <label class="f"><span>Paycheck amount</span>
       <div class="money-in sm"><i>${esc(s.symbol)}</i>
         <input class="num" id="setPay" type="text" inputmode="decimal" value="${s.paycheck||""}" placeholder="0.00"></div>
-      <div class="hint">The "+ Paycheck" button on the Add screen fills this in.</div></label>
+      <div class="hint">The "+ Paycheck" button on the Add screen fills in this name and amount.</div></label>
     <button class="btn sm" id="saveSettings">Save settings</button>
   </div>
   <div class="card">
@@ -2972,6 +2973,7 @@ document.addEventListener("click",e=>{
     case "saveSettings":{
       S.settings.symbol=$("#setSym").value.trim()||"$";
       const f=num($("#setFloor").value);S.settings.floor=isFinite(f)&&f>0?+f.toFixed(2):0;
+      S.settings.paycheckName=$("#setPayName").value.trim()||"Paycheck";
       const pc=num($("#setPay").value);S.settings.paycheck=isFinite(pc)&&pc>0?+pc.toFixed(2):0;
       save();render();toast("Saved");break;}
     case "copyPrev":{
