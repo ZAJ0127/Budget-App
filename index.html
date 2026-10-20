@@ -1481,7 +1481,7 @@ function renderPlan(){
     const sfRows=rows.filter(showSF);
     const fixed=rows.filter(r=>!isSF(r)&&isFixed(r.line)&&(r.bud||r.spent));
     const flex=rows.filter(r=>!isSF(r)&&!isFixed(r.line)&&(r.bud||r.spent));
-    const empty=rows.filter(r=>!r.bud&&!r.spent&&!showSF(r));
+    const empty=rows.filter(r=>!r.bud&&!r.spent&&!isSF(r));
     const minRow=minChk()>0?`<button class="planline" data-minchk="1"><div class="pl"><b>Checking minimum</b>
         <span class="num">Always kept in checking · never free to spend${minCredit(i)?" · "+money(minCredit(i))+" counted as saved":""}</span></div>
         <div class="pr num">${money(minChk())}<small>minimum</small></div></button>`:"";
