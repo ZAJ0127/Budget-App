@@ -464,11 +464,21 @@ const typedOf=s=>{const d=dOf(s);return S.settings.dateFormat==="MDY"
   :p2(d.getDate())+"/"+p2(d.getMonth()+1)+"/"+String(d.getFullYear()).slice(2);};
 
 /* ---------- cycles ---------- */
+/* the plan of cycle i without the one-off bumps (interest, money taken out) that
+   logged entries added to it, so it can start the next cycle */
+function planBase(i){
+  const b=Object.assign({},S.budgets[String(i)]||{});
+  for(const x of S.sav)if(x.y===i&&x.adj)for(const a of x.adj)b[a.l]=cents((b[a.l]||0)-a.a);
+  return b;
+}
 function ensureCycles(iso){
   let last=S.cycles[S.cycles.length-1];
   while(iso>last.e){
     const s=addDays(last.e,1);
     S.cycles.push({i:S.cycles.length,s,e:addDays(s,27)});
+    /* a new cycle starts with the plan of the one before it */
+    const ni=String(S.cycles.length-1);
+    if(!S.budgets[ni]&&S.budgets[String(S.cycles.length-2)])S.budgets[ni]=planBase(S.cycles.length-2);
     last=S.cycles[S.cycles.length-1];
   }
   return last;
@@ -3049,7 +3059,7 @@ document.addEventListener("click",e=>{
     case "copyPrev":{
       const p=S.budgets[String(view.cycle-1)];
       if(!p){toast("No plan on the previous cycle");break;}
-      S.budgets[String(view.cycle)]=Object.assign({},p);save();render();toast("Plan copied");break;}
+      S.budgets[String(view.cycle)]=planBase(view.cycle-1);save();render();toast("Plan copied");break;}
     case "doExport":{
       const b=new Blob([JSON.stringify(S)],{type:"application/json"});dl(b,"budget-backup-"+todayIso()+".json");
       toast("Backup saved");break;}
